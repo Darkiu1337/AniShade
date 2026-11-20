@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anishade"
+version = "0.9.0"
+description = "ReShade + Anime4K Restore manager for visual novels and Japanese games"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["PySide6>=6.6"]
+license = { text = "MIT" }
+authors = [{ name = "AniShade" }]
+keywords = ["reshade", "anime4k", "visual-novel", "renpy", "rpg-maker"]
+
+[project.scripts]
+anishade = "anishade.app:main"
+anishade-cli = "anishade.cli:main"
+
+[tool.setuptools]
+packages = ["anishade", "anishade.ui"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501", "B008"]

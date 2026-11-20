@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+sandbox/
+dist/
+build/
+*.spec
+.ruff_cache/
+.pytest_cache/
+vendor/ReShade_Setup_*.exe
+vendor/Anime4K_*.zip
+*.log
