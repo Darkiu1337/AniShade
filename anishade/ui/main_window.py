@@ -404,7 +404,35 @@ class MainWindow(QMainWindow):
 
         card.add(Divider())
 
-        # 3. NW.js official runtime updater + package.json compatibility fixer
+        # 3. Immediate toggle for the 100 Save Slots plugin
+        slots_row = QHBoxLayout()
+        slots_row.setSpacing(12)
+        slots_text = QVBoxLayout()
+        slots_text.setSpacing(2)
+        slots_title = QLabel("Expandir para 100 slots de save")
+        slots_title.setStyleSheet("font-weight: 600;")
+        self.rpgmaker_save_slots_status = QLabel("—")
+        self.rpgmaker_save_slots_status.setObjectName("muted")
+        self.rpgmaker_save_slots_status.setWordWrap(True)
+        self.rpgmaker_save_slots_status.setStyleSheet("font-size: 8.6pt;")
+        slots_text.addWidget(slots_title)
+        slots_text.addWidget(self.rpgmaker_save_slots_status)
+        slots_row.addLayout(slots_text, 1)
+
+        self.rpgmaker_save_slots_toggle = ToggleSwitch()
+        self.rpgmaker_save_slots_toggle.setToolTip(
+            "Ativa ou remove AniShade_SaveSlots100.js para liberar 100 slots manuais de save "
+            "(mantém o Autosave no MZ e nunca reduz se o jogo já tiver mais de 100)."
+        )
+        self.rpgmaker_save_slots_toggle.toggled.connect(
+            lambda checked: self._on_rpgmaker_plugin_toggled("save_slots_100", checked)
+        )
+        slots_row.addWidget(self.rpgmaker_save_slots_toggle, 0, Qt.AlignVCenter)
+        card.add_layout(slots_row)
+
+        card.add(Divider())
+
+        # 4. NW.js official runtime updater + package.json compatibility fixer
         nwjs_row = QHBoxLayout()
         nwjs_row.setSpacing(10)
         nwjs_text = QVBoxLayout()
@@ -696,7 +724,10 @@ class MainWindow(QMainWindow):
                 and rpgmaker.find_js_dir(game.game_dir) is not None
                 and (
                     bool(manifest.get("rpgmaker_plugin")) != bool(game.rpgmaker_hide_textbox)
-                    or bool((manifest.get("rpgmaker_plugins") or {}).get("no_alt_skip")) != bool(game.rpgmaker_no_alt_skip)
+                    or bool((manifest.get("rpgmaker_plugins") or {}).get("no_alt_skip"))
+                    != bool(game.rpgmaker_no_alt_skip)
+                    or bool((manifest.get("rpgmaker_plugins") or {}).get("save_slots_100"))
+                    != bool(game.rpgmaker_save_slots_100)
                 )
             )
         ):
@@ -927,7 +958,11 @@ class MainWindow(QMainWindow):
         if self._loading or self.current_game is None:
             return
         game = self.current_game
-        toggle = self.rpgmaker_plugin_toggle if plugin_key == "hide_textbox" else self.rpgmaker_no_alt_toggle
+        toggle = {
+            "hide_textbox": self.rpgmaker_plugin_toggle,
+            "no_alt_skip": self.rpgmaker_no_alt_toggle,
+            "save_slots_100": self.rpgmaker_save_slots_toggle,
+        }[plugin_key]
         try:
             installer.set_rpgmaker_plugin(self.store, game, plugin_key, checked, status=self._log)
         except Exception as exc:  # noqa: BLE001
@@ -983,6 +1018,9 @@ class MainWindow(QMainWindow):
             rpgmaker_no_alt_skip=(
                 bool(self.current_game.rpgmaker_no_alt_skip) if self.current_game else True
             ),
+            rpgmaker_save_slots_100=(
+                bool(self.current_game.rpgmaker_save_slots_100) if self.current_game else True
+            ),
         )
 
     def _refresh_rpgmaker_card(self) -> None:
@@ -1037,6 +1075,31 @@ class MainWindow(QMainWindow):
         else:
             self.rpgmaker_no_alt_status.setText(
                 "Desativado — ative o interruptor para impedir que Alt / Alt+Tab pule texto."
+            )
+
+        save_slots_active = (
+            installer.is_rpgmaker_plugin_active(game.game_dir, "save_slots_100") if has_plugins else False
+        )
+        self.rpgmaker_save_slots_toggle.blockSignals(True)
+        self.rpgmaker_save_slots_toggle.setEnabled(can_toggle)
+        self.rpgmaker_save_slots_toggle.setChecked(save_slots_active)
+        self.rpgmaker_save_slots_toggle.blockSignals(False)
+
+        if not has_plugins:
+            self.rpgmaker_save_slots_status.setText(
+                "plugins.js não encontrado (jogo compactado ou estrutura NW.js não padrão)."
+            )
+        elif save_slots_active:
+            self.rpgmaker_save_slots_status.setText(
+                f"Ativo ({rpgmaker.SAVE_SLOTS_100_FILE}). 100 slots manuais de save liberados (MV e MZ)."
+            )
+        elif game.rpgmaker_save_slots_100:
+            self.rpgmaker_save_slots_status.setText(
+                "Não instalado ainda — ative o interruptor agora ou ele será instalado junto com o ReShade."
+            )
+        else:
+            self.rpgmaker_save_slots_status.setText(
+                "Desativado — ative o interruptor para expandir o limite para 100 slots de save."
             )
 
         record = nwjs.load_update_record(game.id)
@@ -1101,10 +1164,12 @@ class MainWindow(QMainWindow):
                 active_labels.append("Ocultar texto (H)")
             if installer.is_rpgmaker_plugin_active(game.game_dir, "no_alt_skip"):
                 active_labels.append("Sem pular com Alt")
+            if installer.is_rpgmaker_plugin_active(game.game_dir, "save_slots_100"):
+                active_labels.append("100 slots de save")
             if active_labels:
                 self.rpgmaker_plugin_value.setText(" · ".join(active_labels))
             elif self.analysis.rpgmaker_plugins_js:
-                if game.rpgmaker_hide_textbox or game.rpgmaker_no_alt_skip:
+                if game.rpgmaker_hide_textbox or game.rpgmaker_no_alt_skip or game.rpgmaker_save_slots_100:
                     self.rpgmaker_plugin_value.setText("serão instalados com o ReShade")
                 else:
                     self.rpgmaker_plugin_value.setText("desativados")
@@ -1144,6 +1209,8 @@ class MainWindow(QMainWindow):
                         bool(manifest.get("rpgmaker_plugin")) != bool(game.rpgmaker_hide_textbox)
                         or bool((manifest.get("rpgmaker_plugins") or {}).get("no_alt_skip"))
                         != bool(game.rpgmaker_no_alt_skip)
+                        or bool((manifest.get("rpgmaker_plugins") or {}).get("save_slots_100"))
+                        != bool(game.rpgmaker_save_slots_100)
                     )
                 )
             )
@@ -1183,6 +1250,9 @@ class MainWindow(QMainWindow):
         self.reanalyze_button.setEnabled(not busy)
         self.rpgmaker_plugin_toggle.setEnabled(not busy and bool(self.analysis and self.analysis.rpgmaker_plugins_js))
         self.rpgmaker_no_alt_toggle.setEnabled(not busy and bool(self.analysis and self.analysis.rpgmaker_plugins_js))
+        self.rpgmaker_save_slots_toggle.setEnabled(
+            not busy and bool(self.analysis and self.analysis.rpgmaker_plugins_js)
+        )
         self.nwjs_update_button.setEnabled(not busy)
         self.nwjs_restore_button.setEnabled(not busy)
         if busy:
@@ -1243,6 +1313,8 @@ class MainWindow(QMainWindow):
                 plugin_lines.append(f"• Plugin RPG Maker: {fname} (tecla H oculta a caixa de texto)\n")
             elif fname == rpgmaker.NO_ALT_SKIP_FILE:
                 plugin_lines.append(f"• Plugin RPG Maker: {fname} (Alt / Alt+Tab não pula texto)\n")
+            elif fname == rpgmaker.SAVE_SLOTS_100_FILE:
+                plugin_lines.append(f"• Plugin RPG Maker: {fname} (100 slots de save)\n")
             else:
                 plugin_lines.append(f"• Plugin RPG Maker: {fname}\n")
         plugin_line = "".join(plugin_lines)
@@ -1462,6 +1534,7 @@ class MainWindow(QMainWindow):
             content_aspect=-1.0,
             rpgmaker_hide_textbox=self.store.settings.rpgmaker_hide_textbox,
             rpgmaker_no_alt_skip=self.store.settings.rpgmaker_no_alt_skip,
+            rpgmaker_save_slots_100=self.store.settings.rpgmaker_save_slots_100,
             detected={
                 "evidence": analysis.engine_evidence,
                 "warnings": analysis.warnings,

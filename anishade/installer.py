@@ -44,6 +44,7 @@ class InstallOptions:
     create_launcher: bool = True
     rpgmaker_hide_textbox: bool = True
     rpgmaker_no_alt_skip: bool = True
+    rpgmaker_save_slots_100: bool = True
     hide_splash: bool = True
 
 
@@ -460,6 +461,7 @@ def install(
     desired_plugins = {
         "hide_textbox": bool(options.rpgmaker_hide_textbox and rpgmaker.is_supported_engine(analysis.engine.key)),
         "no_alt_skip": bool(options.rpgmaker_no_alt_skip and rpgmaker.is_supported_engine(analysis.engine.key)),
+        "save_slots_100": bool(options.rpgmaker_save_slots_100 and rpgmaker.is_supported_engine(analysis.engine.key)),
     }
     active_plugins: dict[str, dict] = {}
     installed_plugin_paths: list[str] = []
@@ -545,6 +547,7 @@ def install(
         "splash_hidden": splash_hidden,
         "rpgmaker_hide_textbox": "hide_textbox" in active_plugins,
         "rpgmaker_no_alt_skip": "no_alt_skip" in active_plugins,
+        "rpgmaker_save_slots_100": "save_slots_100" in active_plugins,
         "rpgmaker_plugin": hide_meta,
         "rpgmaker_plugins": active_plugins,
     }
@@ -562,6 +565,7 @@ def install(
     game.engine_name = analysis.engine.name
     game.rpgmaker_hide_textbox = options.rpgmaker_hide_textbox
     game.rpgmaker_no_alt_skip = options.rpgmaker_no_alt_skip
+    game.rpgmaker_save_slots_100 = options.rpgmaker_save_slots_100
     store.save_games()
 
     log("Instalacao concluida.")
@@ -798,7 +802,12 @@ def set_rpgmaker_plugin(
     shared_sha = str(state.get("plugins_js_sha256") or "")
     shared_pjs_path = str(state.get("plugins_js_path") or "")
 
-    attr_name = "rpgmaker_hide_textbox" if plugin_key == "hide_textbox" else "rpgmaker_no_alt_skip"
+    attr_map = {
+        "hide_textbox": "rpgmaker_hide_textbox",
+        "no_alt_skip": "rpgmaker_no_alt_skip",
+        "save_slots_100": "rpgmaker_save_slots_100",
+    }
+    attr_name = attr_map[plugin_key]
 
     if enabled:
         result = rpgmaker.install_plugin(

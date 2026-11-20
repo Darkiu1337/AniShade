@@ -204,6 +204,12 @@ class SettingsDialog(QDialog):
         self.rpgmaker_no_alt_check.setChecked(self.settings.rpgmaker_no_alt_skip)
         card.add(self.rpgmaker_no_alt_check)
 
+        self.rpgmaker_save_slots_check = QCheckBox(
+            "Expandir para 100 slots de save no RPG Maker MV/MZ"
+        )
+        self.rpgmaker_save_slots_check.setChecked(self.settings.rpgmaker_save_slots_100)
+        card.add(self.rpgmaker_save_slots_check)
+
         divider = Divider()
         card.add(divider)
 
@@ -412,6 +418,7 @@ class SettingsDialog(QDialog):
         self.settings.create_launcher = self.launcher_check.isChecked()
         self.settings.rpgmaker_hide_textbox = self.rpgmaker_plugin_check.isChecked()
         self.settings.rpgmaker_no_alt_skip = self.rpgmaker_no_alt_check.isChecked()
+        self.settings.rpgmaker_save_slots_100 = self.rpgmaker_save_slots_check.isChecked()
         self.store.save_settings()
         self.accept()
 

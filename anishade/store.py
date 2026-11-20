@@ -57,6 +57,7 @@ class Game:
     dll_override: str = ""
     rpgmaker_hide_textbox: bool = True
     rpgmaker_no_alt_skip: bool = True
+    rpgmaker_save_slots_100: bool = True
     nwjs_version: str = ""
     user_notes: str = ""
     detected: dict = field(default_factory=dict)
@@ -92,6 +93,7 @@ class Settings:
         self.create_launcher: bool = bool(data.get("create_launcher", True))
         self.rpgmaker_hide_textbox: bool = bool(data.get("rpgmaker_hide_textbox", True))
         self.rpgmaker_no_alt_skip: bool = bool(data.get("rpgmaker_no_alt_skip", True))
+        self.rpgmaker_save_slots_100: bool = bool(data.get("rpgmaker_save_slots_100", True))
         self.theme: str = data.get("theme", "dark")
         self.last_dir: str = data.get("last_dir", "")
         self.confirm_before_overwrite: bool = bool(data.get("confirm_before_overwrite", True))

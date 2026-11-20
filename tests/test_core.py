@@ -386,19 +386,33 @@ class InstallFlowTests(unittest.TestCase):
         original = "var $plugins =\n[\n];\n"
         plugins_js.write_text(original, encoding="utf-8")
 
-        installer.install(self.store, self.game, InstallOptions(rpgmaker_hide_textbox=True, rpgmaker_no_alt_skip=True))
+        installer.install(
+            self.store,
+            self.game,
+            InstallOptions(
+                rpgmaker_hide_textbox=True,
+                rpgmaker_no_alt_skip=True,
+                rpgmaker_save_slots_100=True,
+            ),
+        )
         self.assertTrue((js_dir / "plugins" / rpgmaker.PLUGIN_FILE).is_file())
         self.assertTrue((js_dir / "plugins" / rpgmaker.NO_ALT_SKIP_FILE).is_file())
+        self.assertTrue((js_dir / "plugins" / rpgmaker.SAVE_SLOTS_100_FILE).is_file())
 
         report = installer.install(
             self.store,
             self.game,
-            InstallOptions(rpgmaker_hide_textbox=False, rpgmaker_no_alt_skip=False),
+            InstallOptions(
+                rpgmaker_hide_textbox=False,
+                rpgmaker_no_alt_skip=False,
+                rpgmaker_save_slots_100=False,
+            ),
         )
         self.assertEqual(report.rpgmaker_plugin, "")
         self.assertEqual(report.rpgmaker_plugins, [])
         self.assertFalse((js_dir / "plugins" / rpgmaker.PLUGIN_FILE).exists())
         self.assertFalse((js_dir / "plugins" / rpgmaker.NO_ALT_SKIP_FILE).exists())
+        self.assertFalse((js_dir / "plugins" / rpgmaker.SAVE_SLOTS_100_FILE).exists())
         self.assertEqual(plugins_js.read_text(encoding="utf-8"), original)
 
     def test_rpgmaker_without_plugins_js_warns_without_failing(self) -> None:
@@ -659,20 +673,31 @@ class StandalonePluginToggleTests(unittest.TestCase):
 
         installer.set_rpgmaker_plugin(self.store, self.game, "hide_textbox", True)
         installer.set_rpgmaker_plugin(self.store, self.game, "no_alt_skip", True)
+        installer.set_rpgmaker_plugin(self.store, self.game, "save_slots_100", True)
         self.assertTrue(installer.is_rpgmaker_plugin_active(self.game_dir, "hide_textbox"))
         self.assertTrue(installer.is_rpgmaker_plugin_active(self.game_dir, "no_alt_skip"))
+        self.assertTrue(installer.is_rpgmaker_plugin_active(self.game_dir, "save_slots_100"))
 
-        # Disabling hide_textbox must keep no_alt_skip intact!
+        # Disabling hide_textbox must keep no_alt_skip and save_slots_100 intact!
         installer.set_rpgmaker_plugin(self.store, self.game, "hide_textbox", False)
         self.assertFalse(installer.is_rpgmaker_plugin_active(self.game_dir, "hide_textbox"))
         self.assertTrue(installer.is_rpgmaker_plugin_active(self.game_dir, "no_alt_skip"))
+        self.assertTrue(installer.is_rpgmaker_plugin_active(self.game_dir, "save_slots_100"))
         self.assertFalse((js_dir / "plugins" / rpgmaker.PLUGIN_FILE).exists())
         self.assertTrue((js_dir / "plugins" / rpgmaker.NO_ALT_SKIP_FILE).is_file())
+        self.assertTrue((js_dir / "plugins" / rpgmaker.SAVE_SLOTS_100_FILE).is_file())
 
-        # Disabling no_alt_skip too restores plugins.js cleanly without touching GamePlugin
+        # Disabling no_alt_skip must keep save_slots_100 intact
         installer.set_rpgmaker_plugin(self.store, self.game, "no_alt_skip", False)
         self.assertFalse(installer.is_rpgmaker_plugin_active(self.game_dir, "no_alt_skip"))
+        self.assertTrue(installer.is_rpgmaker_plugin_active(self.game_dir, "save_slots_100"))
         self.assertFalse((js_dir / "plugins" / rpgmaker.NO_ALT_SKIP_FILE).exists())
+        self.assertTrue((js_dir / "plugins" / rpgmaker.SAVE_SLOTS_100_FILE).is_file())
+
+        # Disabling save_slots_100 too restores plugins.js cleanly without touching GamePlugin
+        installer.set_rpgmaker_plugin(self.store, self.game, "save_slots_100", False)
+        self.assertFalse(installer.is_rpgmaker_plugin_active(self.game_dir, "save_slots_100"))
+        self.assertFalse((js_dir / "plugins" / rpgmaker.SAVE_SLOTS_100_FILE).exists())
         self.assertEqual((js_dir / "plugins.js").read_text(encoding="utf-8"), original)
 
     def test_no_alt_skip_plugin_runtime_blocks_alt_and_keeps_ctrl(self) -> None:
@@ -774,6 +799,104 @@ class StandalonePluginToggleTests(unittest.TestCase):
         res = engine.evaluate(scenario)
         self.assertFalse(res.isError(), res.toString())
         self.assertEqual(res.toString(), "NO_ALT_OK")
+
+    def test_save_slots_100_plugin_runtime_mv_mz_and_preserves_higher_limit(self) -> None:
+        try:
+            from PySide6.QtCore import QCoreApplication
+            from PySide6.QtQml import QJSEngine
+        except ImportError:
+            self.skipTest("PySide6.QtQml indisponivel")
+
+        _app = QCoreApplication.instance() or QCoreApplication([])
+
+        # 1. RPG Maker MV (default 20 slots, including hardcoded maxItems)
+        mv = QJSEngine()
+        self.assertFalse(
+            mv.evaluate(
+                """
+                var window = {};
+                var Utils = { RPGMAKER_NAME: "MV" };
+                var DataManager = { maxSavefiles: function() { return 20; } };
+                function Window_SavefileList() {}
+                Window_SavefileList.prototype.maxItems = function() { return 20; };
+                """
+            ).isError()
+        )
+        mv_load = mv.evaluate(rpgmaker.SAVE_SLOTS_100_SOURCE)
+        self.assertFalse(mv_load.isError(), mv_load.toString())
+        mv_res = mv.evaluate(
+            """
+            (function() {
+                if (DataManager.maxSavefiles() !== 100) throw new Error("MV maxSavefiles != 100");
+                var win = new Window_SavefileList();
+                if (win.maxItems() !== 100) throw new Error("MV maxItems != 100");
+                return "MV_OK";
+            })();
+            """
+        )
+        self.assertFalse(mv_res.isError(), mv_res.toString())
+        self.assertEqual(mv_res.toString(), "MV_OK")
+
+        # 2. RPG Maker MZ (slot 0 Autosave + 100 manual slots = 101 maxSavefiles)
+        mz = QJSEngine()
+        self.assertFalse(
+            mz.evaluate(
+                """
+                var window = {};
+                var Utils = { RPGMAKER_NAME: "MZ" };
+                var DataManager = { maxSavefiles: function() { return 20; } };
+                function Window_SavefileList(autosave) { this._autosave = autosave; }
+                Window_SavefileList.prototype.indexToSavefileId = function(i) {
+                    return i + (this._autosave ? 0 : 1);
+                };
+                Window_SavefileList.prototype.maxItems = function() {
+                    return DataManager.maxSavefiles() - (this._autosave ? 0 : 1);
+                };
+                """
+            ).isError()
+        )
+        mz_load = mz.evaluate(rpgmaker.SAVE_SLOTS_100_SOURCE)
+        self.assertFalse(mz_load.isError(), mz_load.toString())
+        mz_res = mz.evaluate(
+            """
+            (function() {
+                if (DataManager.maxSavefiles() !== 101) throw new Error("MZ maxSavefiles != 101");
+                var loadWin = new Window_SavefileList(true);
+                if (loadWin.maxItems() !== 101) throw new Error("MZ autosave maxItems != 101");
+                var saveWin = new Window_SavefileList(false);
+                if (saveWin.maxItems() !== 100) throw new Error("MZ manual maxItems != 100");
+                return "MZ_OK";
+            })();
+            """
+        )
+        self.assertFalse(mz_res.isError(), mz_res.toString())
+        self.assertEqual(mz_res.toString(), "MZ_OK")
+
+        # 3. Never shrinks games that already allow > 100 slots
+        high = QJSEngine()
+        self.assertFalse(
+            high.evaluate(
+                """
+                var window = {};
+                var Utils = { RPGMAKER_NAME: "MV" };
+                var DataManager = { maxSavefiles: function() { return 200; } };
+                function Window_SavefileList() {}
+                Window_SavefileList.prototype.maxItems = function() { return 200; };
+                """
+            ).isError()
+        )
+        self.assertFalse(high.evaluate(rpgmaker.SAVE_SLOTS_100_SOURCE).isError())
+        high_res = high.evaluate(
+            """
+            (function() {
+                if (DataManager.maxSavefiles() !== 200) throw new Error("Must preserve 200");
+                if (new Window_SavefileList().maxItems() !== 200) throw new Error("Must preserve maxItems 200");
+                return "HIGH_OK";
+            })();
+            """
+        )
+        self.assertFalse(high_res.isError(), high_res.toString())
+        self.assertEqual(high_res.toString(), "HIGH_OK")
 
 
 class NwjsUpdaterTests(unittest.TestCase):

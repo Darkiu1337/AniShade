@@ -111,6 +111,7 @@ def cmd_install(args: argparse.Namespace) -> int:
         create_launcher=not args.no_launcher,
         rpgmaker_hide_textbox=not args.no_hide_textbox,
         rpgmaker_no_alt_skip=not args.no_alt_skip_plugin,
+        rpgmaker_save_slots_100=not args.no_save_slots_plugin,
     )
     report = installer.install(
         store,
@@ -262,6 +263,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="nao instala o plugin que impede Alt/Alt+Tab de pular texto em jogos RPG Maker MV/MZ",
     )
+    install.add_argument(
+        "--no-save-slots-plugin",
+        action="store_true",
+        help="nao instala o plugin que expande para 100 slots de save em jogos RPG Maker MV/MZ",
+    )
     install.set_defaults(func=cmd_install)
 
     uninstall = sub.add_parser("uninstall", help="remove o ReShade instalado pelo AniShade")
@@ -286,7 +292,7 @@ def build_parser() -> argparse.ArgumentParser:
     plugin_cmd.add_argument("exe")
     plugin_cmd.add_argument(
         "--plugin",
-        choices=["hide_textbox", "no_alt_skip"],
+        choices=["hide_textbox", "no_alt_skip", "save_slots_100"],
         default="hide_textbox",
         help="qual plugin alternar (padrao: hide_textbox)",
     )

@@ -23,9 +23,11 @@ O ReShade é baixado uma única vez do site oficial e fica em cache para todos o
   Arquivos modificados por você e um `ReShade.ini` pré-existente vão para backup/restauração.
 - **Correções por engine**: launcher `.bat` com variáveis recomendadas (`RENPY_RENDERER`, etc.)
   e avisos de conflito (ENB, Special K, DXVK, launcher errado, Vulkan, pasta sem permissão).
-- **Plugin para RPG Maker MV/MZ**: interruptor na tela do jogo (e instalação automática junto com
-  o ReShade) para adicionar/remover `AniShade_HideTextbox.js` (tecla **H** para ocultar/exibir a
-  caixa de texto), com backup e restauração limpa de `plugins.js`.
+- **Plugins para RPG Maker MV/MZ**: interruptores na tela do jogo (e instalação automática junto
+  com o ReShade) com backup e restauração limpa de `plugins.js`:
+  - `AniShade_HideTextbox.js` — tecla **H** para ocultar/exibir a caixa de texto;
+  - `AniShade_NoAltSkip.js` — impede `Alt` / `Alt+Tab` / `Alt+Enter` de pular diálogos (mantendo `Ctrl`);
+  - `AniShade_SaveSlots100.js` — expande o limite para **100 slots manuais de save** (MV e MZ).
 - **Atualizador oficial do NW.js**: baixa o NW.js oficial (`nwjs.io` / `dl.nwjs.io`) uma única vez
   para o cache local, reutiliza em todos os jogos RPG Maker MV/MZ, corrige problemas comuns do
   `package.json` (`name` ausente, `--autoplay-policy`, flags V8 obsoletas, compatibilidade
@@ -136,6 +138,8 @@ restauração completa do Anime4K — sem depender de recorte por proporção do
 | `reshade-shaders\Shaders\AniShade\_anishade_shaders.json` | registro dos shaders instalados |
 | `AniShade-Iniciar.bat` | launcher opcional com correções do engine |
 | `(www\)js\plugins\AniShade_HideTextbox.js` | plugin RPG Maker MV/MZ para ocultar a caixa de texto com `H` |
+| `(www\)js\plugins\AniShade_NoAltSkip.js` | plugin RPG Maker MV/MZ para impedir `Alt` / `Alt+Tab` de pular diálogos |
+| `(www\)js\plugins\AniShade_SaveSlots100.js` | plugin RPG Maker MV/MZ que libera 100 slots manuais de save |
 
 O manifesto de cada jogo fica em `%LOCALAPPDATA%\AniShade\games\<id>.json`, com hash de cada
 arquivo. É isso que permite desinstalar sem tocar em arquivos de terceiros.

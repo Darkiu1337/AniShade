@@ -17,6 +17,10 @@ NO_ALT_SKIP_NAME = "AniShade_NoAltSkip"
 NO_ALT_SKIP_FILE = f"{NO_ALT_SKIP_NAME}.js"
 NO_ALT_SKIP_DESCRIPTION = "AniShade: Prevent Alt / Alt+Tab from skipping message text."
 
+SAVE_SLOTS_100_NAME = "AniShade_SaveSlots100"
+SAVE_SLOTS_100_FILE = f"{SAVE_SLOTS_100_NAME}.js"
+SAVE_SLOTS_100_DESCRIPTION = "AniShade: Expand the save menu to 100 manual save slots."
+
 SUPPORTED_ENGINES = ("rpgmaker_mv",)
 
 #: Pure ES5 JavaScript so it works on every RPG Maker MV (including NW.js 0.12)
@@ -503,6 +507,72 @@ NO_ALT_SKIP_SOURCE = r"""/*:
 })();
 """
 
+#: Pure ES5 plugin that expands RPG Maker MV and MZ save screens to 100 manual
+#: save slots (101 total on MZ so Autosave slot 0 + manual slots 1..100 all fit).
+SAVE_SLOTS_100_SOURCE = r"""/*:
+ * @target MZ
+ * @plugindesc [AniShade] Expand save slots to 100 manual slots (MV and MZ).
+ * @author AniShade
+ * @help
+ * Expands the maximum number of save slots to 100 manual slots
+ * (100 in RPG Maker MV; Autosave + 100 manual slots in RPG Maker MZ).
+ * Never shrinks the limit if the game already allows more than 100 slots.
+ *
+ * Compatible with RPG Maker MV and RPG Maker MZ.
+ * Installed and managed automatically by AniShade.
+ */
+
+(function() {
+    "use strict";
+
+    if (window.__AniShadeSaveSlots100Loaded) {
+        return;
+    }
+    window.__AniShadeSaveSlots100Loaded = true;
+
+    var MANUAL_SLOTS = 100;
+
+    function isMzEngine() {
+        if (typeof Utils !== "undefined" && Utils && Utils.RPGMAKER_NAME === "MZ") {
+            return true;
+        }
+        if (
+            typeof Window_SavefileList !== "undefined" &&
+            Window_SavefileList.prototype &&
+            typeof Window_SavefileList.prototype.indexToSavefileId === "function"
+        ) {
+            return true;
+        }
+        return false;
+    }
+
+    var targetMaxFiles = isMzEngine() ? MANUAL_SLOTS + 1 : MANUAL_SLOTS;
+
+    if (typeof DataManager !== "undefined" && DataManager) {
+        var _DataManager_maxSavefiles = DataManager.maxSavefiles;
+        DataManager.maxSavefiles = function() {
+            var base = typeof _DataManager_maxSavefiles === "function"
+                ? Number(_DataManager_maxSavefiles.call(this)) || 0
+                : 0;
+            return Math.max(base, targetMaxFiles);
+        };
+    }
+
+    if (typeof Window_SavefileList !== "undefined" && Window_SavefileList.prototype) {
+        var _Window_SavefileList_maxItems = Window_SavefileList.prototype.maxItems;
+        Window_SavefileList.prototype.maxItems = function() {
+            var base = typeof _Window_SavefileList_maxItems === "function"
+                ? Number(_Window_SavefileList_maxItems.call(this)) || 0
+                : 0;
+            var minimum = isMzEngine()
+                ? (this._autosave ? MANUAL_SLOTS + 1 : MANUAL_SLOTS)
+                : MANUAL_SLOTS;
+            return Math.max(base, minimum);
+        };
+    }
+})();
+"""
+
 
 @dataclass(frozen=True)
 class PluginSpec:
@@ -528,6 +598,12 @@ PLUGINS: dict[str, PluginSpec] = {
         name=NO_ALT_SKIP_NAME,
         description=NO_ALT_SKIP_DESCRIPTION,
         source=NO_ALT_SKIP_SOURCE,
+    ),
+    "save_slots_100": PluginSpec(
+        key="save_slots_100",
+        name=SAVE_SLOTS_100_NAME,
+        description=SAVE_SLOTS_100_DESCRIPTION,
+        source=SAVE_SLOTS_100_SOURCE,
     ),
 }
 ALL_MANAGED_NAMES: tuple[str, ...] = tuple(spec.name for spec in PLUGINS.values())
