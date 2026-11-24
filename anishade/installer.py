@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import anime4k, detect, nwjs, paths, pe, renpy, reshade, rpgmaker, winapi
+from .i18n import tr
 from .store import Game, Store
 
 PRESET_HEADER = ""
@@ -206,16 +207,13 @@ def _safe_write(path: Path, data: bytes) -> None:
             temporary.unlink(missing_ok=True)
         except OSError:
             pass
-        raise AdminRequired(
-            f"Sem permissao para escrever em {path.parent}.\n"
-            "Feche o jogo e execute o AniShade como administrador."
-        ) from exc
+        raise AdminRequired(tr("installer.no_write_perm", folder=path.parent)) from exc
     except OSError as exc:
         try:
             temporary.unlink(missing_ok=True)
         except OSError:
             pass
-        raise InstallError(f"Falha ao gravar {path.name}: {exc}") from exc
+        raise InstallError(tr("installer.write_failed", name=path.name, error=exc)) from exc
 
 
 def _backup(identifier: str, source: Path, label: str) -> str:
@@ -238,9 +236,7 @@ def _choose_dll_name(game_dir: Path, analysis: detect.GameAnalysis, forced: str)
     if forced:
         existing = game_dir / forced
         if existing.is_file() and not detect.is_reshade_dll(existing):
-            raise ConflictError(
-                f"{forced} ja existe na pasta do jogo e nao e o ReShade.", [forced]
-            )
+            raise ConflictError(tr("installer.conflict_forced", name=forced), [forced])
         return forced
 
     choices: list[str] = []
@@ -251,7 +247,7 @@ def _choose_dll_name(game_dir: Path, analysis: detect.GameAnalysis, forced: str)
         if name not in choices:
             choices.append(name)
     if not choices:
-        raise InstallError("API sem DLL de proxy conhecida.")
+        raise InstallError(tr("installer.no_proxy_dll"))
 
     conflicts: list[str] = []
     for name in choices:
@@ -263,9 +259,7 @@ def _choose_dll_name(game_dir: Path, analysis: detect.GameAnalysis, forced: str)
         conflicts.append(name)
 
     raise ConflictError(
-        "Todas as DLLs de proxy para esta API ja existem e pertencem a outro programa:\n"
-        + "\n".join(f"  - {name}" for name in conflicts)
-        + "\n\nRenomeie/remova o conflito ou escolha outro nome de DLL no campo 'DLL proxy'.",
+        tr("installer.conflict_all", list="\n".join(f"  - {name}" for name in conflicts)),
         conflicts,
     )
 
@@ -349,20 +343,15 @@ def install(
 
     exe = game.exe_path
     if not exe.is_file():
-        raise InstallError(f"Executavel nao encontrado: {exe}")
+        raise InstallError(tr("installer.exe_not_found", exe=exe))
     game_dir = exe.parent
 
     if winapi.process_running(exe.name):
-        raise GameRunningError(
-            f"{exe.name} esta em execucao. Feche o jogo antes de instalar ou atualizar o ReShade."
-        )
+        raise GameRunningError(tr("installer.game_running_install", exe=exe.name))
 
     analysis = analysis or detect.analyze(exe, game.api_override or None, game.engine_override or None)
     if analysis.api == "vulkan":
-        raise InstallError(
-            "API Vulkan detectada. O ReShade nao pode ser carregado por proxy DLL neste jogo.\n"
-            "Inicie o jogo em Direct3D 11/OpenGL ou use a injecao global do ReShade."
-        )
+        raise InstallError(tr("installer.vulkan_unsupported"))
 
     bits = analysis.bits or game.bits or 64
     release = reshade.ensure_release(
@@ -371,10 +360,10 @@ def install(
         status=log,
     )
     dll_source = reshade.verified_dll(release, bits)
-    log(f"Usando {dll_source.name} do ReShade {release.version}.")
+    log(tr("installer.using_reshade_dll", dll=dll_source.name, version=release.version))
 
     dll_name = _choose_dll_name(game_dir, analysis, options.dll_name)
-    log(f"DLL de proxy: {dll_name}")
+    log(tr("installer.proxy_dll", dll=dll_name))
 
     previous_manifest = load_manifest(game.id)
     files: list[dict] = []
@@ -386,9 +375,9 @@ def install(
     if options.hide_splash:
         dll_bytes, splash_hidden = reshade.patch_hide_splash(dll_bytes)
         if splash_hidden:
-            log("Splash inicial e spinner de carregamento ocultados na DLL do ReShade.")
+            log(tr("installer.splash_hidden"))
         else:
-            log("Aviso: nao foi possivel ocultar o splash nesta versao do ReShade.")
+            log(tr("installer.splash_hide_warn"))
     for entry in previous_manifest.get("files", []):
         if entry.get("kind") != "reshade":
             continue
@@ -397,7 +386,7 @@ def install(
             continue
         if winapi.sha256_file(old_path) == entry.get("sha256"):
             old_path.unlink(missing_ok=True)
-            log(f"DLL antiga removida: {entry.get('path')}")
+            log(tr("installer.old_dll_removed", path=entry.get("path")))
 
     dll_target = game_dir / dll_name
     _safe_write(dll_target, dll_bytes)
@@ -405,14 +394,11 @@ def install(
 
     # 2. Anime4K Restore shader (ReShade FX)
     shader_files = anime4k.required_files(options.variant)
-    log("Copiando shader ReShade FX: " + ", ".join(shader_files))
+    log(tr("installer.copying_shaders", files=", ".join(shader_files)))
     try:
         copied = anime4k.deploy_shaders(game_dir, shader_files)
     except PermissionError as exc:
-        raise AdminRequired(
-            f"Sem permissao para escrever os shaders em {game_dir}.\n"
-            "Execute o AniShade como administrador."
-        ) from exc
+        raise AdminRequired(tr("installer.no_shader_perm", folder=game_dir)) from exc
     for path in copied:
         files.append(
             {
@@ -430,7 +416,7 @@ def install(
             backup = _backup(game.id, preset_path, "AniShade.ini")
             if backup:
                 backups.append(backup)
-                log("Preset editado no jogo foi salvo em backup.")
+                log(tr("installer.preset_backed_up"))
     preset_text = anime4k.build_preset(options.variant, options.top_margin, options.content_aspect)
     preset_bytes = (PRESET_HEADER + preset_text).encode("utf-8")
     _safe_write(preset_path, preset_bytes)
@@ -466,7 +452,8 @@ def install(
 
     # 5. optional launcher with engine-specific environment fixes
     launcher = ""
-    launcher_path = game_dir / "AniShade-Iniciar.bat"
+    launcher_path = game_dir / "AniShade-Launch.bat"
+    legacy_launcher = game_dir / "AniShade-Iniciar.bat"
     if options.create_launcher and (analysis.env or analysis.args):
         try:
             winapi.write_batch_launcher(
@@ -476,6 +463,7 @@ def install(
                 args=list(analysis.args),
                 title=game.name,
             )
+            legacy_launcher.unlink(missing_ok=True)
             launcher = launcher_path.name
             files.append(
                 {
@@ -486,9 +474,10 @@ def install(
             )
         except OSError as exc:
             if status:
-                status(f"Aviso: nao foi possivel criar o launcher .bat ({exc}).")
+                status(tr("installer.launcher_warn", error=exc))
     else:
         launcher_path.unlink(missing_ok=True)
+        legacy_launcher.unlink(missing_ok=True)
 
     # 6. RPG Maker MV/MZ plugins (hide-textbox H key + no-Alt-skip)
     warnings = list(analysis.warnings)
@@ -526,11 +515,11 @@ def install(
                 last_plugins_js_sha = result.plugins_js_sha256
                 last_plugins_js_path = result.plugins_js_path
                 installed_plugin_paths.append(result.plugin_path)
-                log(f"Plugin RPG Maker instalado: {result.plugin_path}.")
+                log(tr("installer.rpgm_plugin_installed", path=result.plugin_path))
             elif result.warning and not plugins_js_missing_warned:
                 plugins_js_missing_warned = True
                 warnings.append(result.warning)
-                log(f"Aviso: {result.warning}")
+                log(tr("installer.warning_prefix", warning=result.warning))
         elif plugin_key in prev_plugins:
             old_meta = dict(prev_plugins[plugin_key])
             if shared_backup:
@@ -545,7 +534,7 @@ def install(
                 log=log,
             )
             if removed_plugin:
-                log(f"Plugin RPG Maker removido: {', '.join(removed_plugin)}.")
+                log(tr("installer.rpgm_plugin_removed", files=", ".join(removed_plugin)))
             if last_plugins_js_path and (game_dir / last_plugins_js_path).is_file():
                 last_plugins_js_sha = winapi.sha256_file(game_dir / last_plugins_js_path)
 
@@ -593,13 +582,13 @@ def install(
                 renpy_urm_version = urm_result.version
                 if urm_result.backup_path and urm_result.backup_path != prev_urm.get("backup_path"):
                     backups.append(urm_result.backup_path)
-                log(f"Universal Ren'Py Mod {urm_result.version} instalado em {urm_result.rpa_path}.")
+                log(tr("installer.urm_installed", version=urm_result.version, path=urm_result.rpa_path))
             elif urm_result.warning:
                 warnings.append(urm_result.warning)
-                log(f"Aviso: {urm_result.warning}")
+                log(tr("installer.warning_prefix", warning=urm_result.warning))
         except renpy.RenpyModError as exc:
-            warnings.append(f"Nao foi possivel instalar o Universal Ren'Py Mod: {exc}")
-            log(f"Aviso: falha ao instalar Universal Ren'Py Mod ({exc}).")
+            warnings.append(tr("installer.urm_install_warn", error=exc))
+            log(tr("installer.urm_install_log_warn", error=exc))
             if prev_urm and renpy.is_urm_active(game_dir):
                 active_urm = dict(prev_urm)
                 renpy_urm_path = str(active_urm.get("rpa_path") or "")
@@ -612,7 +601,7 @@ def install(
             log=log,
         )
         if removed_urm:
-            log(f"Universal Ren'Py Mod removido: {', '.join(removed_urm)}.")
+            log(tr("installer.urm_removed", files=", ".join(removed_urm)))
     save_renpy_meta(game.id, active_urm)
 
     manifest = {
@@ -661,7 +650,7 @@ def install(
     game.renpy_urm = options.renpy_urm
     store.save_games()
 
-    log("Instalacao concluida.")
+    log(tr("installer.done"))
     return InstallReport(
         game_id=game.id,
         dll_name=dll_name,
@@ -693,12 +682,9 @@ def uninstall(store: Store, game: Game, status=None) -> list[str]:
     game_dir = exe.parent
     manifest = load_manifest(game.id)
     if not manifest:
-        raise InstallError(
-            "Nao ha registro de instalacao do AniShade para este jogo. "
-            "Nada foi removido para nao apagar arquivos de terceiros."
-        )
+        raise InstallError(tr("installer.no_manifest"))
     if exe.is_file() and winapi.process_running(exe.name):
-        raise GameRunningError("Feche o jogo antes de desinstalar.")
+        raise GameRunningError(tr("installer.game_running_uninstall"))
 
     removed: list[str] = []
     for entry in manifest.get("files", []):
@@ -712,13 +698,13 @@ def uninstall(store: Store, game: Game, status=None) -> list[str]:
         if expected and winapi.sha256_file(target) != expected:
             backup = _backup(game.id, target, Path(rel_path).name)
             if backup:
-                log(f"Arquivo modificado preservado em backup: {backup}")
+                log(tr("installer.modified_backed_up", backup=backup))
             continue
         try:
             target.unlink()
             removed.append(rel_path)
         except OSError as exc:
-            log(f"Nao foi possivel remover {rel_path}: {exc}")
+            log(tr("installer.remove_failed", path=rel_path, error=exc))
 
     # shader folder only loses files registered in its own marker
     anime4k.remove_shaders(game_dir)
@@ -732,15 +718,15 @@ def uninstall(store: Store, game: Game, status=None) -> list[str]:
             if expected and winapi.sha256_file(ini_path) != expected:
                 backup = _backup(game.id, ini_path, "ReShade.ini")
                 if backup:
-                    log(f"ReShade.ini modificado preservado em backup: {backup}")
+                    log(tr("installer.ini_modified_backed_up", backup=backup))
             ini_path.unlink(missing_ok=True)
             removed.append("ReShade.ini")
     elif ini_backup and Path(ini_backup).is_file():
         try:
             ini_path.write_bytes(Path(ini_backup).read_bytes())
-            log("ReShade.ini original restaurado.")
+            log(tr("installer.ini_restored"))
         except OSError as exc:
-            log(f"Falha ao restaurar ReShade.ini: {exc}")
+            log(tr("installer.ini_restore_failed", error=exc))
 
     plugin_state = _extract_manifest_plugins(manifest, game.id)
     installed_plugins = plugin_state.get("plugins") or {}
@@ -790,7 +776,7 @@ def uninstall(store: Store, game: Game, status=None) -> list[str]:
         )
         renpy_meta_path(game.id).unlink(missing_ok=True)
 
-    for name in (anime4k.PRESET_NAME, "AniShade-Iniciar.bat"):
+    for name in (anime4k.PRESET_NAME, "AniShade-Launch.bat", "AniShade-Iniciar.bat"):
         leftover = game_dir / name
         if leftover.is_file():
             leftover.unlink(missing_ok=True)
@@ -798,7 +784,7 @@ def uninstall(store: Store, game: Game, status=None) -> list[str]:
     manifest_path(game.id).unlink(missing_ok=True)
     game.installed = False
     store.save_games()
-    log("ReShade removido do jogo.")
+    log(tr("installer.reshade_removed"))
     return removed
 
 
@@ -836,22 +822,22 @@ def inspect(game: Game) -> InstallState:
         state.dll_name = dll_entry["path"]
         state.dll_ok = dll_path.is_file() and winapi.sha256_file(dll_path) == dll_entry.get("sha256")
         if not state.dll_ok:
-            state.problems.append("DLL do ReShade ausente ou modificada.")
+            state.problems.append(tr("installer.problem_dll"))
 
     preset_entry = next((item for item in manifest.get("files", []) if item.get("kind") == "preset"), None)
     preset_path = game_dir / anime4k.PRESET_NAME
     if preset_path.is_file():
         state.preset_ok = True
         if preset_entry and winapi.sha256_file(preset_path) != preset_entry.get("sha256"):
-            state.problems.append("Preset foi editado dentro do jogo (normal se voce ajustou na mao).")
+            state.problems.append(tr("installer.problem_preset_edited"))
     else:
-        state.problems.append("Preset AniShade.ini ausente.")
+        state.problems.append(tr("installer.problem_preset_missing"))
 
     expected = anime4k.required_files(manifest.get("variant", game.variant))
     shader_dir = game_dir / anime4k.SHADER_SUBDIR
     state.shaders_ok = all((shader_dir / name).is_file() for name in expected)
     if not state.shaders_ok:
-        state.problems.append("Shaders Anime4K ausentes; use 'Reinstalar'.")
+        state.problems.append(tr("installer.problem_shaders_missing"))
 
     plugin_state = _extract_manifest_plugins(manifest, game.id)
     installed_plugins = plugin_state.get("plugins") or {}
@@ -899,16 +885,14 @@ def set_rpgmaker_plugin(
             status(message)
 
     if plugin_key not in rpgmaker.PLUGINS:
-        raise InstallError(f"Plugin RPG Maker desconhecido: {plugin_key}")
+        raise InstallError(tr("installer.unknown_rpgm_plugin", key=plugin_key))
 
     spec = rpgmaker.PLUGINS[plugin_key]
     exe = game.exe_path
     if not exe.is_file():
-        raise InstallError(f"Executavel nao encontrado: {exe}")
+        raise InstallError(tr("installer.exe_not_found", exe=exe))
     if winapi.process_running(exe.name):
-        raise GameRunningError(
-            f"{exe.name} esta em execucao. Feche o jogo antes de alterar o plugin."
-        )
+        raise GameRunningError(tr("installer.game_running_plugin", exe=exe.name))
 
     game_dir = exe.parent
     manifest = load_manifest(game.id)
@@ -934,7 +918,7 @@ def set_rpgmaker_plugin(
             existing_backup=shared_backup,
         )
         if not result.installed:
-            raise InstallError(result.warning or "Arquivo plugins.js nao encontrado neste jogo.")
+            raise InstallError(result.warning or tr("installer.plugins_js_missing"))
         if result.plugins_js_backup:
             shared_backup = result.plugins_js_backup
         shared_sha = result.plugins_js_sha256
@@ -962,7 +946,7 @@ def set_rpgmaker_plugin(
             save_manifest(game.id, manifest)
         setattr(game, attr_name, True)
         store.save_games()
-        log(f"Plugin {spec.filename} ativado em {result.plugins_js_path}.")
+        log(tr("installer.plugin_enabled", file=spec.filename, path=result.plugins_js_path))
         return result.plugin_path
 
     # Disable / remove plugin
@@ -1012,7 +996,7 @@ def set_rpgmaker_plugin(
         save_manifest(game.id, manifest)
     setattr(game, attr_name, False)
     store.save_games()
-    log(f"Plugin {spec.filename} removido do jogo.")
+    log(tr("installer.plugin_removed", file=spec.filename))
     return ""
 
 
@@ -1041,11 +1025,9 @@ def set_renpy_urm(
 
     exe = game.exe_path
     if not exe.is_file():
-        raise InstallError(f"Executavel nao encontrado: {exe}")
+        raise InstallError(tr("installer.exe_not_found", exe=exe))
     if winapi.process_running(exe.name):
-        raise GameRunningError(
-            f"{exe.name} esta em execucao. Feche o jogo antes de alterar o Universal Ren'Py Mod."
-        )
+        raise GameRunningError(tr("installer.game_running_urm", exe=exe.name))
 
     game_dir = exe.parent
     manifest = load_manifest(game.id)
@@ -1053,7 +1035,7 @@ def set_renpy_urm(
 
     if enabled:
         if renpy.find_game_dir(game_dir) is None:
-            raise InstallError("Pasta 'game/' do Ren'Py nao encontrada ao lado do executavel.")
+            raise InstallError(tr("installer.renpy_game_dir_missing"))
         release = renpy.ensure_release(
             preferred_version or None,
             progress=progress,
@@ -1069,7 +1051,7 @@ def set_renpy_urm(
             existing_meta=prev_urm,
         )
         if not result.installed:
-            raise InstallError(result.warning or "Pasta 'game/' do Ren'Py nao encontrada.")
+            raise InstallError(result.warning or tr("installer.renpy_game_dir_missing_short"))
         meta = result.to_manifest()
         save_renpy_meta(game.id, meta)
         if manifest:
@@ -1078,7 +1060,7 @@ def set_renpy_urm(
             save_manifest(game.id, manifest)
         game.renpy_urm = True
         store.save_games()
-        log(f"Universal Ren'Py Mod {result.version} ativado em {result.rpa_path}.")
+        log(tr("installer.urm_enabled", version=result.version, path=result.rpa_path))
         return result.rpa_path
 
     removed = renpy.uninstall_urm(
@@ -1095,9 +1077,9 @@ def set_renpy_urm(
     game.renpy_urm = False
     store.save_games()
     if removed:
-        log(f"Universal Ren'Py Mod removido ({', '.join(removed)}).")
+        log(tr("installer.urm_removed_list", files=", ".join(removed)))
     else:
-        log("Universal Ren'Py Mod desativado.")
+        log(tr("installer.urm_disabled"))
     return ""
 
 
@@ -1144,7 +1126,7 @@ def realign_reshade_bits(store: Store, game: Game, status=None) -> bool:
 
     game.bits = new_bits
     store.save_games()
-    log(f"DLL do ReShade ({dll_name}) atualizada para {new_bits} bits.")
+    log(tr("installer.dll_realigned", dll=dll_name, bits=new_bits))
     return True
 
 
@@ -1185,7 +1167,7 @@ def update_nwjs(
     try:
         report.reshade_realigned = realign_reshade_bits(store, game, status=log)
     except (InstallError, reshade.ReshadeError) as exc:
-        report.warnings.append(f"ReShade instalado precisa ser reinstalado ({exc}).")
+        report.warnings.append(tr("installer.reshade_reinstall_needed", error=exc))
     return report
 
 

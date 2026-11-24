@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..i18n import tr
 from .theme import ACCENT, ACCENT_HOVER
 
 
@@ -116,7 +117,7 @@ class ChainLabel(QLabel):
         self.setWordWrap(True)
 
     def set_chain(self, steps: list[str]) -> None:
-        self.setText("  →  ".join(steps) if steps else "Nenhum passe selecionado")
+        self.setText("  →  ".join(steps) if steps else tr("widget.no_pass_selected"))
 
 
 class ToggleSwitch(QAbstractButton):

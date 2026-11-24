@@ -1,68 +1,72 @@
 # AniShade
 
-**ReShade + Anime4K Restore para visual novels e jogos japoneses.**
+**ReShade + Anime4K Restore manager for visual novels and Japanese games.**
 
-Um gerenciador desktop simples: você aponta para o `.exe` do jogo, o AniShade detecta a engine
-e a API gráfica, instala o ReShade com o **Anime4K Restore** e cria um preset pronto para usar.
-O ReShade é baixado uma única vez do site oficial e fica em cache para todos os jogos.
+A lightweight desktop manager: point AniShade to a game's `.exe`, and it detects the engine and
+graphics API, installs ReShade with **Anime4K Restore**, and generates a ready-to-use preset.
+ReShade is downloaded once from the official site and cached locally for all games.
 
-![Tela principal](docs/screenshot.png)
+![Main window](docs/screenshot.png)
 
-## O que ele faz
+## Features
 
-- **Adiciona jogos pelo executável** (ou arrastando o `.exe` para a janela).
-- **Detecta a engine e a API gráfica** lendo a tabela de importações do PE + arquivos do jogo
+- **Add games by executable** (or drag and drop the `.exe` onto the window).
+- **Automatic engine & graphics API detection** by inspecting the PE import table and game files
   (Ren'Py, RPG Maker MV/MZ, RGSS, KiriKiri/XP3, SiglusEngine, BGI, YU-RIS, CatSystem2, RealLive,
   LiveMaker, CMVS, Nitroplus, WOLF, NScripter, Artemis, Unity, Unreal, GameMaker, Godot).
-- **Baixa o ReShade 1x** de `reshade.me`, extrai `ReShade32.dll`/`ReShade64.dll` do instalador
-  e reutiliza o cache em todos os jogos (funciona offline depois disso).
-- **Instala a DLL proxy correta**: `dxgi.dll`, `d3d9.dll`, `opengl32.dll` ou `ddraw.dll`,
-  com fallback automático (`d3d11.dll`/`d3d12.dll`) quando já existe outra DLL com o mesmo nome.
-- **Instala o shader em ReShade FX** (`.fx`) e gera o preset `AniShade.ini` com a técnica ativa.
-- **Desinstalação limpa**: só remove arquivos que o AniShade criou, com verificação de hash.
-  Arquivos modificados por você e um `ReShade.ini` pré-existente vão para backup/restauração.
-- **Correções por engine**: launcher `.bat` com variáveis recomendadas (`RENPY_RENDERER`, etc.)
-  e avisos de conflito (ENB, Special K, DXVK, launcher errado, Vulkan, pasta sem permissão).
-- **Plugins para RPG Maker MV/MZ**: interruptores na tela do jogo (e instalação automática junto
-  com o ReShade) com backup e restauração limpa de `plugins.js`:
-  - `AniShade_HideTextbox.js` — tecla **H** para ocultar/exibir a caixa de texto;
-  - `AniShade_NoAltSkip.js` — impede `Alt` / `Alt+Tab` / `Alt+Enter` de pular diálogos (mantendo `Ctrl`);
-  - `AniShade_SaveSlots100.js` — expande o limite para **100 slots manuais de save** (MV e MZ).
-- **Atualizador oficial do NW.js**: baixa o NW.js oficial (`nwjs.io` / `dl.nwjs.io`) uma única vez
-  para o cache local, reutiliza em todos os jogos RPG Maker MV/MZ, corrige problemas comuns do
-  `package.json` (`name` ausente, `--autoplay-policy`, flags V8 obsoletas, compatibilidade
-  `process.mainModule`) e permite restaurar o backup original.
-- **Universal Ren'Py Mod (URM) para jogos Ren'Py**: interruptor direto na tela de jogos Ren'Py que
-  baixa o `0x52_URM.rpa` oficial de [0x52.dev](https://0x52.dev/mods/Universal-Ren-Py-Mod-1000) uma
-  única vez para o cache local e instala ou remove o arquivo em `game/0x52_URM.rpa` com um clique.
-- **Home abre o overlay do ReShade** (garantido no `ReShade.ini`).
-- **Sem banners ou spinner no jogo**: o splash inicial do ReShade ("ReShade 6.x...") e o
-  círculo de carregamento no canto superior esquerdo (ao alternar janela/fullscreen) são
-  ocultados na DLL instalada, além de preset/tutorial/toast desligados no `ReShade.ini`.
-  Pressione **Home** quando quiser abrir o overlay normalmente.
+- **Download ReShade once** from `reshade.me`, extract `ReShade32.dll`/`ReShade64.dll` from the
+  installer, and reuse the local cache across all games (works offline afterward).
+- **Correct proxy DLL selection**: `dxgi.dll`, `d3d9.dll`, `opengl32.dll`, or `ddraw.dll`,
+  with automatic fallback (`d3d11.dll`/`d3d12.dll`) when another DLL already occupies the name.
+- **ReShade FX shaders** (`.fx`) and auto-generated `AniShade.ini` preset with the selected
+  technique enabled.
+- **Clean uninstall**: only removes files created by AniShade using SHA-256 verification.
+  User-modified files and pre-existing `ReShade.ini` files are backed up and restored.
+- **Per-engine fixes**: optional `.bat` launcher with recommended environment variables
+  (`RENPY_RENDERER`, etc.) and conflict warnings (ENB, Special K, DXVK, wrong launcher, Vulkan,
+  non-writable folders).
+- **RPG Maker MV/MZ plugins**: instant toggles right on the game panel (and automatic install
+  with ReShade) with clean `plugins.js` backup and restore:
+  - `AniShade_HideTextbox.js` — press **H** to hide/show the message textbox;
+  - `AniShade_NoAltSkip.js` — prevents `Alt` / `Alt+Tab` / `Alt+Enter` from skipping dialogue (keeps `Ctrl`);
+  - `AniShade_SaveSlots100.js` — expands the save menu to **100 manual save slots** (MV and MZ).
+- **Official NW.js updater**: downloads official NW.js (`nwjs.io` / `dl.nwjs.io`) once to local
+  cache, reuses it across RPG Maker MV/MZ games, fixes common `package.json` issues (missing
+  `name`, `--autoplay-policy`, obsolete V8 flags, `process.mainModule` compatibility), and lets you
+  restore the original backup.
+- **Universal Ren'Py Mod (URM) for Ren'Py games**: one-click toggle on Ren'Py games that downloads
+  official `0x52_URM.rpa` from [0x52.dev](https://0x52.dev/mods/Universal-Ren-Py-Mod-1000) once to
+  local cache and installs or removes `game/0x52_URM.rpa`.
+- **Home opens the ReShade overlay** (configured in `ReShade.ini`).
+- **No startup splash or resize spinner**: ReShade's startup banner ("ReShade 6.x...") and
+  top-left loading spinner (when switching windowed/fullscreen) are hidden in the deployed DLL,
+  and preset/tutorial/toast banners are disabled in `ReShade.ini`. Press **Home** anytime to open
+  the overlay normally.
+- **Localization**: English (default) and Brazilian Portuguese (`Português (Brasil)`), switchable
+  instantly in **Settings → General → Language**.
 
-## Sobre os shaders (GLSL → ReShade FX)
+## About the shaders (GLSL → ReShade FX)
 
-O pacote oficial do Anime4K é escrito em **GLSL para MPV/libplacebo**. O ReShade **não carrega
-`.glsl`** — ele só compila o próprio formato ReShade FX (`.fx`). Por isso o AniShade **converte
-os shaders oficiais** (blocos `//!DESC`/`//!HOOK`/`//!SAVE` + CNN) para `.fx`, com:
+The official Anime4K package is written in **GLSL for MPV/libplacebo**. ReShade **does not load
+`.glsl`** — it only compiles its own ReShade FX (`.fx`) format. AniShade **converts the official
+shaders** (`//!DESC`/`//!HOOK`/`//!SAVE` blocks + CNN weights) to `.fx`, adding:
 
-- uma pass **Copy** que tira um snapshot do frame antes de filtrar (sem feedback entre frames);
-- `anishade_mul` no lugar de matrizes `float4x4` (sem ambiguidade de layout);
-- alfa forçado a 1 nos pixels filtrados;
-- **máscara de letterbox/pillarbox** pela proporção do conteúdo, preservando as barras;
-- margem superior configurável para jogos NW.js cuja janela inclui a barra de título no swapchain.
+- a **Copy** pass that snapshots the frame before filtering (preventing frame-to-frame feedback);
+- `anishade_mul` instead of `float4x4` matrix multiplies (avoiding layout ambiguity);
+- alpha forced to 1 on filtered pixels;
+- **letterbox/pillarbox masking** by content aspect ratio, preserving black bars;
+- configurable top margin for NW.js games whose swapchain includes the window title bar.
 
-Os shaders são regerados a partir de `vendor/anime4k/*.glsl` por `tools/build_fx.py`.
-Nenhum binário/port pronto é baixado: só os `.glsl` oficiais (MIT, bloc97) são usados como fonte.
+Shaders are regenerated from `vendor/anime4k/*.glsl` via `tools/build_fx.py`.
+No third-party shader ports are downloaded: only the official `.glsl` sources (MIT, bloc97) are used.
 
-## Requisitos
+## Requirements
 
-- Windows 10/11 (64 bits).
-- Python 3.10+ para rodar do código-fonte (ou use o `.exe` gerado).
-- GPU com Direct3D 9/11 ou OpenGL. Para Vulkan, veja [Limitações](#limitações).
+- Windows 10/11 (64-bit).
+- Python 3.10+ to run from source (or use the standalone `AniShade.exe` release).
+- GPU with Direct3D 9/11 or OpenGL. For Vulkan, see [Limitations](#limitations).
 
-## Rodar do código-fonte
+## Run from source
 
 ```powershell
 python -m venv .venv
@@ -71,168 +75,169 @@ pip install -r requirements.txt
 python run.py
 ```
 
-Também funciona via `python -m anishade`.
+Also works via `python -m anishade`.
 
-## Gerar o executável
+## Build the executable
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File build_exe.ps1
-# gera dist\AniShade.exe (um único arquivo, sem console)
+# outputs dist\AniShade.exe (single-file, windowed)
 ```
 
-Para uma pasta portátil (abre mais rápido): `build_exe.ps1 -OneDir`.
+For a portable folder (faster startup): `build_exe.ps1 -OneDir`.
 
-## Como usar
+## Usage
 
-1. **Adicionar jogo** → escolha o `.exe` que realmente abre o jogo (não o launcher/config).
-2. Confira **Engine**, **API gráfica** e **Arquitetura**. Se algo estiver errado, force a
-   detecção nos combos (o app reanalisa na hora).
-3. Escolha a **variante do Anime4K Restore** pela resolução interna do jogo.
-4. O campo **DLL proxy** fica em `Automático` na maioria dos casos; se outro mod já usa
-   `dxgi.dll` (Special K, DXVK, ENB), o AniShade escolhe `d3d11.dll`/`d3d12.dll` sozinho e
-   mostra o nome efetivo. Você também pode forçar um nome manualmente.
-5. Clique em **Instalar ReShade + Anime4K**.
-6. Abra o jogo e pressione **Home** para abrir o overlay do ReShade.
-7. Para trocar de variante depois, selecione outra e clique em **Aplicar alterações**
-   (o preset antigo editado é salvo em backup).
+1. Click **Add Game** → select the `.exe` that launches the game (not a launcher/config tool).
+2. Check **Engine**, **Graphics API**, and **Architecture**. If anything looks wrong, override it
+   in the dropdowns (AniShade re-analyzes immediately).
+3. Choose an **Anime4K Restore variant** matching the game's internal resolution.
+4. Leave **Proxy DLL** on `Auto` in most cases; if another mod already uses `dxgi.dll`
+   (Special K, DXVK, ENB), AniShade automatically selects `d3d11.dll`/`d3d12.dll` and shows the
+   resolved name. You can also override it manually.
+5. Click **Install ReShade + Anime4K**.
+6. Launch the game and press **Home** to open the ReShade overlay.
+7. To switch variants later, pick another one and click **Apply changes**
+   (any manually edited preset is backed up first).
 
-### Restore
+### Restore variants
 
-O Restore é o shader principal — reconstrói linhas e texturas que o jogo ampliou com
-bilinear/nearest. **Não faz upscale**; trabalha na resolução final e o efeito é sutil por
-natureza. Para comparar, abra o overlay (Home) e marque/desmarque a técnica.
+Restore is the core Anime4K shader — it reconstructs lines and textures that the game upscaled
+with bilinear/nearest filtering. **It does not upscale**; it runs at the final resolution and the
+effect is subtle by design. To compare, open the overlay (Home) and toggle the technique on/off.
 
-| Variante | Resolução indicada | Custo de GPU |
+| Variant | Target internal resolution | GPU cost |
 |---|---|---|
 | Restore CNN S | 480p – 720p | 1x |
-| Restore CNN M (padrão) | 720p – 900p | 2x |
+| Restore CNN M (default) | 720p – 900p | 2x |
 | Restore CNN L | 900p – 1080p | 3x |
 | Restore CNN VL | 1080p – 1440p | 5x |
 | Restore CNN UL | 1440p – 4K | 8x |
-| Restore CNN **Soft** S/M/L/VL/UL | mesmas faixas | idem |
+| Restore CNN **Soft** S/M/L/VL/UL | same ranges | same |
 
-As variantes **Soft** são menos agressivas: melhores para arte suave, gradientes e fundos
-desfocados, ou quando o CNN normal realça demais o ringing.
+**Soft** variants are less aggressive: ideal for soft artwork, gradients, and blurred backgrounds,
+or when standard CNN accentuates ringing.
 
-### Barras pretas e proteção contra feedback nas bordas
+### Black bars and border feedback protection
 
-Jogos NW.js/Chromium (e outros compositores com swapchain parcial) muitas vezes não redesenham
-as barras pretas de letterbox/pillarbox (nem a barra de título em modo janela) a cada frame. Sem
-proteção, a CNN do Anime4K reprocessa a própria saída 60x por segundo nessas áreas e cria um
-ruído colorido crescente nas laterais.
+NW.js/Chromium games (and other partial-swapchain compositors) often do not redraw letterbox/pillarbox
+black bars (or the windowed title bar) every frame. Without protection, Anime4K's CNN would re-filter
+its own output 60 times per second in those regions and create growing colored noise along the edges.
 
-Os shaders `.fx` do AniShade incluem uma **proteção temporal automática de 4 buffers**
-(`texPrev1..4`): qualquer pixel cujo valor no backbuffer ainda seja a saída anterior do próprio
-shader é mantido intacto sem ser refiltrado, enquanto 100% da área ativa do jogo recebe a
-restauração completa do Anime4K — sem depender de recorte por proporção do `package.json`.
+AniShade's `.fx` shaders include an **automatic 4-buffer temporal guard** (`texPrev1..4`): any pixel
+whose backbuffer value still matches a previous shader output is passed through untouched, while
+100% of the active game area receives full Anime4K restoration — without needing manual aspect cropping.
 
-- **Proporção do conteúdo**: padrão `0` (tela inteira). Só precisa ser alterada se você quiser
-  restringir o shader manualmente.
-- **Margem superior** (px): padrão `0`. Opcional em modo janela se quiser pular a barra de título.
+- **Content aspect ratio**: default `0` (full screen). Only change it if you want to manually
+  restrict the shader region.
+- **Top margin** (px): default `0`. Optional in windowed mode if you want to skip the title bar.
 
-## Arquivos criados no jogo
+## Files created in the game folder
 
-| Arquivo | Função |
+| File | Purpose |
 |---|---|
-| `dxgi.dll` / `d3d9.dll` / `opengl32.dll` / `ddraw.dll` | DLL proxy do ReShade |
-| `ReShade.ini` | configuração do ReShade (mesclada, sem apagar suas chaves) |
-| `AniShade.ini` | preset com a técnica ativa e as máscaras |
-| `reshade-shaders\Shaders\AniShade\*.fx` | shader ReShade FX selecionado |
-| `reshade-shaders\Shaders\AniShade\_anishade_shaders.json` | registro dos shaders instalados |
-| `AniShade-Iniciar.bat` | launcher opcional com correções do engine |
-| `(www\)js\plugins\AniShade_HideTextbox.js` | plugin RPG Maker MV/MZ para ocultar a caixa de texto com `H` |
-| `(www\)js\plugins\AniShade_NoAltSkip.js` | plugin RPG Maker MV/MZ para impedir `Alt` / `Alt+Tab` de pular diálogos |
-| `(www\)js\plugins\AniShade_SaveSlots100.js` | plugin RPG Maker MV/MZ que libera 100 slots manuais de save |
-| `game\0x52_URM.rpa` | Universal Ren'Py Mod (opcional, ativado pelo interruptor em jogos Ren'Py) |
+| `dxgi.dll` / `d3d9.dll` / `opengl32.dll` / `ddraw.dll` | ReShade proxy DLL |
+| `ReShade.ini` | ReShade configuration (merged without deleting existing keys) |
+| `AniShade.ini` | Preset with the active technique and mask definitions |
+| `reshade-shaders\Shaders\AniShade\*.fx` | Selected ReShade FX shader |
+| `reshade-shaders\Shaders\AniShade\_anishade_shaders.json` | Installed shader manifest |
+| `AniShade-Launch.bat` | Optional launcher with engine environment fixes |
+| `(www\)js\plugins\AniShade_HideTextbox.js` | RPG Maker MV/MZ plugin to hide textbox with `H` |
+| `(www\)js\plugins\AniShade_NoAltSkip.js` | RPG Maker MV/MZ plugin to stop `Alt` / `Alt+Tab` from skipping text |
+| `(www\)js\plugins\AniShade_SaveSlots100.js` | RPG Maker MV/MZ plugin expanding to 100 manual save slots |
+| `game\0x52_URM.rpa` | Universal Ren'Py Mod (optional, toggled per Ren'Py game) |
 
-O manifesto de cada jogo fica em `%LOCALAPPDATA%\AniShade\games\<id>.json`, com hash de cada
-arquivo. É isso que permite desinstalar sem tocar em arquivos de terceiros.
+Each game's manifest is stored in `%LOCALAPPDATA%\AniShade\games\<id>.json` with file hashes,
+allowing safe uninstallation without touching third-party files.
 
-![Instalação](docs/screenshot-install.png)
+![Installation](docs/screenshot-install.png)
 
-## Cache e pastas
+## Cache and data folders
 
-- ReShade: `%LOCALAPPDATA%\AniShade\cache\reshade\<versão>\`
-- Universal Ren'Py Mod: `%LOCALAPPDATA%\AniShade\cache\urm\<versão>\`
+- ReShade: `%LOCALAPPDATA%\AniShade\cache\reshade\<version>\`
+- NW.js: `%LOCALAPPDATA%\AniShade\cache\nwjs\<version>-<arch>\`
+- Universal Ren'Py Mod: `%LOCALAPPDATA%\AniShade\cache\urm\<version>\`
 - Downloads: `%LOCALAPPDATA%\AniShade\cache\downloads\`
-- Backups: `%LOCALAPPDATA%\AniShade\backups\<jogo>\`
-- Logs: `%LOCALAPPDATA%\AniShade\logs\anishade.log` e `ReShade.log` na pasta do jogo
+- Backups: `%LOCALAPPDATA%\AniShade\backups\<game>\`
+- Logs: `%LOCALAPPDATA%\AniShade\logs\anishade.log` and `ReShade.log` in the game folder
 
-## Solução de problemas
+## Troubleshooting
 
-**O overlay não abre com Home**
-- Confira `ReShade.ini` → `[INPUT] KeyOverlay=36,0,0,0` (36 = Home).
-- Alguns jogos capturam o teclado; tente `ReShade.ini` com `InputProcessing=2` (já padrão).
+**The overlay doesn't open with Home**
+- Check `ReShade.ini` → `[INPUT] KeyOverlay=36,0,0,0` (36 = Home).
+- Some games capture keyboard input aggressively; check `InputProcessing=2` in `ReShade.ini`.
 
-**Vejo ruído colorido nas laterais ou na barra de título**
-- Ajuste **Proporção do conteúdo** para a proporção real (ex.: 1.5) e/ou **Margem superior**
-  para a altura da barra de título (ex.: 31 em modo janela).
-- Em fullscreen, margem 0. Se o jogo estiver em 4:3, a proporção é `1.3333`.
+**Colored noise on the sides or title bar**
+- Set **Content aspect ratio** to the actual aspect ratio (e.g. `1.5`) and/or **Top margin** to
+  the title bar height (e.g. `31` in windowed mode).
+- In fullscreen, keep Top margin at `0`. For 4:3 games, the aspect ratio is `1.3333`.
 
-**O jogo abre, mas nada parece filtrado**
-- Restore é sutil; compare marcando/desmarcando a técnica no overlay (Home).
-- Use uma variante maior (L/VL) ou confira se o `ReShade.log` mostra
+**The game opens, but nothing looks filtered**
+- Restore is subtle; compare by toggling the technique on/off in the overlay (Home).
+- Try a larger variant (L/VL) or check `ReShade.log` for
   `Successfully compiled ... Anime4K_Restore_...fx`.
-- Se o log mostrar `Failed to compile`, envie o trecho do erro.
 
 **Vulkan**
-- ReShade não carrega por proxy DLL em Vulkan. Inicie o jogo em D3D11/OpenGL
-  (ex.: `-force-d3d11`) ou use a injeção global do ReShade.
+- ReShade cannot load via proxy DLL on Vulkan. Launch the game in Direct3D 11/OpenGL
+  (e.g. `-force-d3d11`) or use ReShade's global Vulkan injection.
 
 ## CLI (headless)
 
 ```powershell
-python -m anishade.cli info "C:\Jogos\VN\game.exe"
-python -m anishade.cli install "C:\Jogos\VN\game.exe" --variant cnn_m --aspect 1.5
-python -m anishade.cli uninstall "C:\Jogos\VN\game.exe"
+python -m anishade.cli info "C:\Games\VN\game.exe"
+python -m anishade.cli install "C:\Games\VN\game.exe" --variant cnn_m --aspect 1.5
+python -m anishade.cli uninstall "C:\Games\VN\game.exe"
 python -m anishade.cli variants
 python -m anishade.cli cache --download
 python -m anishade.cli list
 ```
 
-## Limitações
+## Limitations
 
-- Somente **Restore** (o escopo escolhido). Denoise/Clamp/upscalers do Anime4K não estão incluídos.
-- **Vulkan** não pode ser injetado por proxy DLL.
-- Não gerencia add-ons (depth buffer, texturas).
-- Jogos com **anti-cheat** (EAC/BattlEye) podem bloquear ou banir com ReShade instalado.
-- Se o `.exe` escolhido for apenas um launcher, o ReShade não será carregado pelo jogo real.
-- O preset é reescrito ao aplicar uma nova variante; edições feitas no overlay são
-  preservadas em backup antes.
+- **Restore** shaders only (by design). Anime4K Denoise/Clamp/Upscalers are not included.
+- **Vulkan** cannot be injected via proxy DLL.
+- Does not manage ReShade add-ons (depth buffer, textures).
+- Games with **anti-cheat** (EAC/BattlEye) may block or ban accounts with ReShade installed.
+- If the selected `.exe` is only a launcher, ReShade won't be loaded by the actual game process.
+- The preset is rewritten when switching variants; manual edits from the overlay are backed up first.
 
-## Estrutura do projeto
+## Project layout
 
 ```
 anishade/
-  pe.py            leitor de PE (bits, imports, delay imports)
-  engines.py       fingerprints e correções por engine
-  detect.py        análise do jogo, API, conteúdo, conflitos, ReShade existente
-  glsl_to_fx.py    tradutor Anime4K GLSL -> ReShade FX (copy pass, máscaras)
-  reshade.py       download oficial + extração das DLLs + cache
-  anime4k.py       catálogo de variantes, deploy .fx e preset
-  installer.py     instalação/desinstalação com manifesto e backups
-  store.py         biblioteca e preferências (JSON atômico)
-  cli.py           interface headless
-  ui/              janela principal, tema, delegates, configurações
-vendor/anime4k/     fontes GLSL oficiais v4.0.1 (MIT, bloc97)
-vendor/anime4k_fx/  shaders ReShade FX gerados por tools/build_fx.py
-tests/              testes de PE, conversão, presets, INI e instalação
-tools/              geração de .fx, ícone, fixtures e screenshots
+  i18n.py          localization catalogs (English default + Brazilian Portuguese)
+  pe.py            PE inspector (bitness, imports, delay imports)
+  engines.py       engine fingerprints and recommended fixes
+  detect.py        game analysis, API, content size, conflicts, existing ReShade
+  glsl_to_fx.py    Anime4K GLSL -> ReShade FX translator (copy pass, guards)
+  reshade.py       official ReShade download, DLL extraction & cache
+  nwjs.py          official NW.js download, cache, runtime updater & package.json fixer
+  rpgmaker.py      RPG Maker MV/MZ plugins & plugins.js patcher
+  renpy.py         Universal Ren'Py Mod (0x52.dev) download, cache & installer
+  anime4k.py       variant catalog, .fx deployment & preset builder
+  installer.py     install/uninstall with manifest & backups
+  store.py         game library and settings (atomic JSON)
+  cli.py           headless CLI
+  ui/              main window, theme, delegates, settings dialog
+vendor/anime4k/     official GLSL sources v4.0.1 (MIT, bloc97)
+vendor/anime4k_fx/  ReShade FX shaders generated by tools/build_fx.py
+tests/              unit tests for PE, shaders, presets, INI, install, plugins, i18n
+tools/              .fx builder, icon generator, fixtures & screenshots
 ```
 
-## Testes
+## Tests
 
 ```powershell
 python -m unittest discover -s tests -v
 ```
 
-## Créditos e licenças
+## Credits and licenses
 
-- **ReShade** — © crosire, licença BSD-3. O AniShade **não redistribui** binários: baixa o
-  instalador oficial em `reshade.me` e extrai as DLLs localmente.
-- **Anime4K** — © bloc97, licença MIT. Os `.glsl` oficiais acompanham o aplicativo
-  (`vendor/anime4k`, v4.0.1) e os `.fx` são uma conversão gerada a partir deles.
+- **ReShade** — © crosire, BSD-3 license. AniShade **does not redistribute** binaries: it downloads
+  the official installer from `reshade.me` and extracts the DLLs locally.
+- **Anime4K** — © bloc97, MIT license. Official `.glsl` files are bundled (`vendor/anime4k`, v4.0.1)
+  and `.fx` files are generated from them.
 - **PySide6 / Qt** — LGPLv3.
 
-O código do AniShade é MIT. Respeite os termos de uso de cada jogo e não use ReShade em
-títulos com anti-cheat.
+AniShade's source code is MIT-licensed. Respect each game's terms of use and do not use ReShade in
+anti-cheat protected games.

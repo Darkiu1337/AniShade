@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import paths
+from .i18n import tr
 
 SHADER_SUBDIR = Path("reshade-shaders") / "Shaders" / "AniShade"
 MARKER_FILE = "_anishade_shaders.json"
@@ -25,11 +26,17 @@ SHADER_VERSION = 2
 class Variant:
     key: str
     file: str
-    label: str
     family: str
     weight: int
     resolution: str
-    description: str
+
+    @property
+    def label(self) -> str:
+        return tr(f"variant.{self.key}.label")
+
+    @property
+    def description(self) -> str:
+        return tr(f"variant.{self.key}.desc")
 
     @property
     def technique(self) -> str:
@@ -37,96 +44,16 @@ class Variant:
 
 
 VARIANTS: tuple[Variant, ...] = (
-    Variant(
-        "cnn_s",
-        "Anime4K_Restore_CNN_S.fx",
-        "Restore CNN S (leve)",
-        "CNN",
-        1,
-        "480p - 720p",
-        "Menor rede neural: reconstroi detalhes com custo baixo. Boa para GPUs integradas e telas pequenas.",
-    ),
-    Variant(
-        "cnn_m",
-        "Anime4K_Restore_CNN_M.fx",
-        "Restore CNN M (equilibrado)",
-        "CNN",
-        2,
-        "720p - 900p",
-        "Equilibrio entre nitidez e desempenho. Recomendado para a maioria das visual novels em 720p/768p.",
-    ),
-    Variant(
-        "cnn_l",
-        "Anime4K_Restore_CNN_L.fx",
-        "Restore CNN L (nitido)",
-        "CNN",
-        3,
-        "900p - 1080p",
-        "Reconstrucao mais forte de linhas e texturas. Indicado para VNs em 1080p.",
-    ),
-    Variant(
-        "cnn_vl",
-        "Anime4K_Restore_CNN_VL.fx",
-        "Restore CNN VL (muito nitido)",
-        "CNN",
-        5,
-        "1080p - 1440p",
-        "Rede maior: mais detalhe em arte de alta resolucao, custo de GPU alto.",
-    ),
-    Variant(
-        "cnn_ul",
-        "Anime4K_Restore_CNN_UL.fx",
-        "Restore CNN UL (maximo)",
-        "CNN",
-        8,
-        "1440p - 4K",
-        "Maior rede disponivel. Qualidade maxima, uso de VRAM/GPU muito alto.",
-    ),
-    Variant(
-        "soft_s",
-        "Anime4K_Restore_CNN_Soft_S.fx",
-        "Restore CNN Soft S (suave)",
-        "Soft",
-        1,
-        "480p - 720p",
-        "Versao suavizada do CNN S: menos ringing/halo em tracos finos e compressao pesada.",
-    ),
-    Variant(
-        "soft_m",
-        "Anime4K_Restore_CNN_Soft_M.fx",
-        "Restore CNN Soft M (suave)",
-        "Soft",
-        2,
-        "720p - 900p",
-        "CNN Soft M: bom para VNs com arte suave, gradientes e fundos desfocados.",
-    ),
-    Variant(
-        "soft_l",
-        "Anime4K_Restore_CNN_Soft_L.fx",
-        "Restore CNN Soft L (suave)",
-        "Soft",
-        3,
-        "900p - 1080p",
-        "CNN Soft L: detalhe alto com transicoes mais naturais. Indicado para 1080p.",
-    ),
-    Variant(
-        "soft_vl",
-        "Anime4K_Restore_CNN_Soft_VL.fx",
-        "Restore CNN Soft VL (suave)",
-        "Soft",
-        5,
-        "1080p - 1440p",
-        "CNN Soft VL: alta resolucao sem exagerar no realce de bordas.",
-    ),
-    Variant(
-        "soft_ul",
-        "Anime4K_Restore_CNN_Soft_UL.fx",
-        "Restore CNN Soft UL (suave)",
-        "Soft",
-        8,
-        "1440p - 4K",
-        "CNN Soft UL: variante mais suave da rede maxima, para 4K sem artefatos agressivos.",
-    ),
+    Variant("cnn_s", "Anime4K_Restore_CNN_S.fx", "CNN", 1, "480p - 720p"),
+    Variant("cnn_m", "Anime4K_Restore_CNN_M.fx", "CNN", 2, "720p - 900p"),
+    Variant("cnn_l", "Anime4K_Restore_CNN_L.fx", "CNN", 3, "900p - 1080p"),
+    Variant("cnn_vl", "Anime4K_Restore_CNN_VL.fx", "CNN", 5, "1080p - 1440p"),
+    Variant("cnn_ul", "Anime4K_Restore_CNN_UL.fx", "CNN", 8, "1440p - 4K"),
+    Variant("soft_s", "Anime4K_Restore_CNN_Soft_S.fx", "Soft", 1, "480p - 720p"),
+    Variant("soft_m", "Anime4K_Restore_CNN_Soft_M.fx", "Soft", 2, "720p - 900p"),
+    Variant("soft_l", "Anime4K_Restore_CNN_Soft_L.fx", "Soft", 3, "900p - 1080p"),
+    Variant("soft_vl", "Anime4K_Restore_CNN_Soft_VL.fx", "Soft", 5, "1080p - 1440p"),
+    Variant("soft_ul", "Anime4K_Restore_CNN_Soft_UL.fx", "Soft", 8, "1440p - 4K"),
 )
 
 _VARIANT_MAP = {variant.key: variant for variant in VARIANTS}
@@ -185,9 +112,7 @@ def deploy_shaders(
     source = source or paths.anime4k_fx_dir()
     missing = missing_bundled(files, source)
     if missing:
-        raise FileNotFoundError(
-            "Shaders ReShade FX ausentes no pacote do AniShade: " + ", ".join(missing)
-        )
+        raise FileNotFoundError(tr("anime4k.missing_fx", files=", ".join(missing)))
 
     shader_dir = game_dir / SHADER_SUBDIR
     shader_dir.mkdir(parents=True, exist_ok=True)

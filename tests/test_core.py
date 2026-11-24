@@ -1164,5 +1164,105 @@ class RenpyUrmTests(unittest.TestCase):
         self.assertFalse((game_dir / "game" / renpy.URM_FILENAME).exists())
 
 
+class I18nTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        from anishade import i18n
+
+        i18n.set_language(i18n.DEFAULT_LANGUAGE)
+
+    def test_default_language_is_english(self) -> None:
+        from anishade import i18n
+        from anishade.store import Settings
+
+        self.assertEqual(i18n.DEFAULT_LANGUAGE, "en")
+        self.assertEqual(Settings().language, "en")
+        self.assertEqual(i18n.normalize_language(""), "en")
+        self.assertEqual(i18n.normalize_language("pt-br"), "pt_BR")
+        self.assertEqual(i18n.normalize_language("unknown"), "en")
+
+    def test_catalogs_have_matching_keys_and_placeholders(self) -> None:
+        import string
+
+        from anishade import i18n
+
+        en_keys = set(i18n._TRANSLATIONS["en"])
+        pt_keys = set(i18n._TRANSLATIONS["pt_BR"])
+        self.assertEqual(en_keys, pt_keys)
+
+        formatter = string.Formatter()
+        for key in en_keys:
+            en_fields = {
+                field_name
+                for _, field_name, _, _ in formatter.parse(i18n._TRANSLATIONS["en"][key])
+                if field_name is not None
+            }
+            pt_fields = {
+                field_name
+                for _, field_name, _, _ in formatter.parse(i18n._TRANSLATIONS["pt_BR"][key])
+                if field_name is not None
+            }
+            self.assertEqual(en_fields, pt_fields, f"Placeholder mismatch for key {key!r}")
+
+    def test_variants_and_engines_follow_active_language(self) -> None:
+        from anishade import anime4k, engines, i18n
+
+        i18n.set_language("en")
+        self.assertIn("balanced", anime4k.variant("cnn_m").label)
+        self.assertEqual(engines.ENGINES["unknown"].name, "Unknown")
+
+        i18n.set_language("pt_BR")
+        self.assertIn("equilibrado", anime4k.variant("cnn_m").label)
+        self.assertEqual(engines.ENGINES["unknown"].name, "Desconhecida")
+
+    def test_ui_switches_language_live_via_settings(self) -> None:
+        import os
+
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+
+        from anishade import i18n
+        from anishade.store import Settings
+        from anishade.ui.main_window import MainWindow
+        from anishade.ui.settings_dialog import SettingsDialog
+
+        app = QApplication.instance() or QApplication([])
+        self.assertIsNotNone(app)
+
+        store = StoreStub()
+        store.settings = Settings()
+        store.games = []
+        store.sorted_games = lambda: []
+        store.save_settings = lambda: None
+        store.get = lambda _id: None
+
+        i18n.set_language("en")
+        win = MainWindow(store)
+        try:
+            self.assertEqual(win.add_button.text(), "Add Game")
+            self.assertEqual(win.settings_button.text(), "Settings")
+
+            dlg = SettingsDialog(store, win)
+            self.assertEqual(dlg.language_combo.currentData(), "en")
+            pt_index = dlg.language_combo.findData("pt_BR")
+            self.assertGreaterEqual(pt_index, 0)
+            dlg.language_combo.setCurrentIndex(pt_index)
+            dlg._save()
+            self.assertEqual(store.settings.language, "pt_BR")
+
+            win.retranslate_ui()
+            self.assertEqual(win.add_button.text(), "Adicionar jogo")
+            self.assertEqual(win.settings_button.text(), "Configurações")
+
+            dlg2 = SettingsDialog(store, win)
+            self.assertEqual(dlg2.windowTitle(), "Configurações — AniShade")
+            en_index = dlg2.language_combo.findData("en")
+            dlg2.language_combo.setCurrentIndex(en_index)
+            dlg2._save()
+            win.retranslate_ui()
+            self.assertEqual(win.add_button.text(), "Add Game")
+        finally:
+            win.close()
+
+
 if __name__ == "__main__":
     unittest.main()

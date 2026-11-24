@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import winapi
+from .i18n import tr
 
 PLUGIN_NAME = "AniShade_HideTextbox"
 PLUGIN_FILE = f"{PLUGIN_NAME}.js"
@@ -850,7 +851,7 @@ def register_plugin_in_text(
     """Return `plugins.js` text with the plugin enabled (idempotent)."""
     span = _find_plugins_array(text)
     if span is None:
-        raise ValueError("Array $plugins nao encontrado em plugins.js.")
+        raise ValueError(tr("rpgmaker_mod.array_not_found"))
 
     open_idx, close_idx = span
     elements = _scan_array_elements(text, open_idx, close_idx)
@@ -1015,10 +1016,7 @@ def install_plugin(
         return PluginInstallResult(
             installed=False,
             name=spec.name,
-            warning=(
-                "Arquivo plugins.js nao encontrado (jogo compactado ou estrutura NW.js nao padrao): "
-                f"plugin {spec.filename} nao foi instalado."
-            ),
+            warning=tr("rpgmaker_mod.plugins_js_not_found", file=spec.filename),
         )
 
     plugins_js = js_dir / "plugins.js"
@@ -1037,10 +1035,7 @@ def install_plugin(
             return PluginInstallResult(
                 installed=False,
                 name=spec.name,
-                warning=(
-                    "Nao foi possivel decodificar plugins.js (codificacao desconhecida): "
-                    f"plugin {spec.filename} nao foi instalado."
-                ),
+                warning=tr("rpgmaker_mod.decode_failed", file=spec.filename),
             )
 
     any_managed_present = any(has_plugin_entry(text, name=name) for name in ALL_MANAGED_NAMES)
@@ -1113,21 +1108,21 @@ def uninstall_plugin(
                     and Path(backup_path).is_file()
                 ):
                     write_fn(plugins_js, Path(backup_path).read_bytes())
-                    emit("plugins.js original restaurado.")
+                    emit(tr("rpgmaker_mod.plugins_js_restored"))
                 elif has_plugin_entry(text, name=plugin_name):
                     if not other_managed_present and backup_fn is not None and expected_hash and current_hash != expected_hash:
                         backup = backup_fn(plugins_js, "plugins.js")
                         if backup:
-                            emit(f"plugins.js modificado preservado em backup: {backup}")
+                            emit(tr("rpgmaker_mod.plugins_js_backed_up", backup=backup))
                     cleaned = unregister_plugin_in_text(text, name=plugin_name)
                     cleaned_bytes = (
                         (b"\xef\xbb\xbf" if has_bom and encoding == "utf-8" else b"")
                         + cleaned.encode(encoding)
                     )
                     write_fn(plugins_js, cleaned_bytes)
-                    emit(f"Entrada {plugin_name} removida de plugins.js.")
+                    emit(tr("rpgmaker_mod.entry_removed", name=plugin_name))
             except (OSError, UnicodeDecodeError) as exc:
-                emit(f"Nao foi possivel limpar plugins.js: {exc}")
+                emit(tr("rpgmaker_mod.clean_failed", error=exc))
 
     plugin_rel = plugin_meta.get("plugin_path") or ""
     if plugin_rel:
@@ -1137,12 +1132,12 @@ def uninstall_plugin(
             if expected_hash and winapi.sha256_file(plugin_file) != expected_hash and backup_fn is not None:
                 backup = backup_fn(plugin_file, plugin_file.name)
                 if backup:
-                    emit(f"Plugin modificado preservado em backup: {backup}")
+                    emit(tr("rpgmaker_mod.plugin_backed_up", backup=backup))
             try:
                 plugin_file.unlink()
                 removed.append(plugin_rel)
             except OSError as exc:
-                emit(f"Nao foi possivel remover {plugin_rel}: {exc}")
+                emit(tr("rpgmaker_mod.remove_failed", path=plugin_rel, error=exc))
 
     return removed
 
@@ -1157,7 +1152,7 @@ def inspect_plugin(game_dir: Path, plugin_meta: dict) -> tuple[bool, list[str]]:
 
     file_ok = bool(plugin_rel) and (game_dir / plugin_rel).is_file()
     if not file_ok:
-        problems.append(f"Plugin RPG Maker ({plugin_file}) ausente; use 'Reinstalar'.")
+        problems.append(tr("rpgmaker_mod.problem_missing", file=plugin_file))
 
     reg_ok = False
     if plugins_js_rel:
@@ -1169,7 +1164,7 @@ def inspect_plugin(game_dir: Path, plugin_meta: dict) -> tuple[bool, list[str]]:
             except OSError:
                 reg_ok = False
     if not reg_ok:
-        problems.append(f"Plugin {plugin_name} nao esta ativo em plugins.js; use 'Reinstalar'.")
+        problems.append(tr("rpgmaker_mod.problem_inactive", name=plugin_name))
 
     return file_ok and reg_ok, problems
 

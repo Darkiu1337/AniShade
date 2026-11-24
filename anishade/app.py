@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from . import __version__, paths, winapi
+from . import __version__, i18n, paths, winapi
 from .store import Store
 
 
@@ -29,7 +29,7 @@ def _setup_logging() -> None:
 def _install_excepthook() -> None:
     def handler(exc_type, exc_value, exc_tb) -> None:
         text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
-        logging.error("Erro não tratado:\n%s", text)
+        logging.error("%s\n%s", i18n.tr("app.unhandled_error"), text)
         if QApplication.instance() is not None:
             box = QMessageBox(QMessageBox.Critical, "AniShade", str(exc_value))
             box.setDetailedText(text)
@@ -58,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
 
     paths.ensure_dirs()
     store = Store()
+    i18n.set_language(store.settings.language)
     window = MainWindow(store)
     window.show()
 

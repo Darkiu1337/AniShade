@@ -16,6 +16,8 @@ import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .i18n import tr
+
 IMAGE_FILE_DLL = 0x2000
 
 MACHINES = {
@@ -36,7 +38,7 @@ class PEInfo:
     path: Path
     machine: int = 0
     bits: int = 0
-    arch: str = "desconhecido"
+    arch: str = "unknown"
     is_dll: bool = False
     subsystem: int = 0
     image_base: int = 0
@@ -56,7 +58,7 @@ class _Reader:
             self._map = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
         except ValueError as exc:  # empty file
             self._file.close()
-            raise PEError(f"arquivo vazio: {path}") from exc
+            raise PEError(tr("pe.empty_file", path=path)) from exc
         self.size = len(self._map)
 
     def close(self) -> None:
@@ -73,22 +75,22 @@ class _Reader:
 
     def u16(self, offset: int) -> int:
         if offset < 0 or offset + 2 > self.size:
-            raise PEError("leitura fora do arquivo")
+            raise PEError(tr("pe.read_oob"))
         return struct.unpack_from("<H", self._map, offset)[0]
 
     def u32(self, offset: int) -> int:
         if offset < 0 or offset + 4 > self.size:
-            raise PEError("leitura fora do arquivo")
+            raise PEError(tr("pe.read_oob"))
         return struct.unpack_from("<I", self._map, offset)[0]
 
     def u64(self, offset: int) -> int:
         if offset < 0 or offset + 8 > self.size:
-            raise PEError("leitura fora do arquivo")
+            raise PEError(tr("pe.read_oob"))
         return struct.unpack_from("<Q", self._map, offset)[0]
 
     def raw(self, offset: int, length: int) -> bytes:
         if offset < 0 or offset + length > self.size:
-            raise PEError("leitura fora do arquivo")
+            raise PEError(tr("pe.read_oob"))
         return self._map[offset : offset + length]
 
     def cstring(self, offset: int, limit: int = 260) -> str:
@@ -115,12 +117,12 @@ def read_pe(path: str | Path) -> PEInfo:
     path = Path(path)
     with _Reader(path) as reader:
         if reader.size < 0x40:
-            raise PEError("arquivo pequeno demais para ser um executavel")
+            raise PEError(tr("pe.too_small"))
         if reader.u16(0) != 0x5A4D:
-            raise PEError("assinatura MZ ausente")
+            raise PEError(tr("pe.no_mz"))
         pe_offset = reader.u32(0x3C)
         if reader.u32(pe_offset) != 0x00004550:
-            raise PEError("assinatura PE ausente")
+            raise PEError(tr("pe.no_pe"))
 
         coff = pe_offset + 4
         machine = reader.u16(coff)
@@ -139,7 +141,7 @@ def read_pe(path: str | Path) -> PEInfo:
             image_base = reader.u64(optional + 24)
             data_dir_offset = optional + 112
         else:
-            raise PEError(f"formato PE desconhecido (magic 0x{magic:x})")
+            raise PEError(tr("pe.unknown_magic", magic=magic))
 
         subsystem = reader.u16(optional + 68)
         number_of_dirs = reader.u32(data_dir_offset - 4)
@@ -206,7 +208,7 @@ def read_pe(path: str | Path) -> PEInfo:
         imports = read_dll_names(1, 20, 12, delay=False)
         delay_imports = read_dll_names(13, 32, 4, delay=True)
 
-        arch, bits = MACHINES.get(machine, ("desconhecido", 64 if is_64 else 32))
+        arch, bits = MACHINES.get(machine, (tr("pe.unknown_arch"), 64 if is_64 else 32))
         if bits == 0:
             bits = 64 if is_64 else 32
 

@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import __version__, paths, winapi
+from .i18n import tr
 
 VERSIONS_URL = "https://nwjs.io/versions.json"
 DOWNLOAD_BASE = "https://dl.nwjs.io"
@@ -186,7 +187,7 @@ def build_release(
 ) -> NwjsRelease:
     clean = _normalize_version(version)
     if not clean:
-        raise NwjsError("Versao do NW.js invalida.")
+        raise NwjsError(tr("nwjs.invalid_version"))
     release = NwjsRelease(
         version=clean,
         arch=arch,
@@ -209,7 +210,7 @@ def fetch_latest_release(
         with _request(VERSIONS_URL, timeout=timeout) as response:
             data = json.loads(response.read().decode("utf-8", "ignore"))
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-        raise NwjsError(f"Nao foi possivel consultar nwjs.io: {exc}") from exc
+        raise NwjsError(tr("nwjs.fetch_failed", error=exc)) from exc
 
     chosen = _normalize_version(str(data.get("stable") or data.get("latest") or ""))
     entries = data.get("versions") or []
@@ -235,7 +236,7 @@ def fetch_latest_release(
                 break
 
     if not chosen:
-        raise NwjsError("Nao encontrei uma versao valida do NW.js em nwjs.io/versions.json.")
+        raise NwjsError(tr("nwjs.no_version"))
 
     components = entry_meta.get("components") or {}
     return build_release(
@@ -326,10 +327,10 @@ def _validate_archive(zip_path: Path) -> tuple[str, list[str]]:
         with zipfile.ZipFile(zip_path, "r") as archive:
             names = [info.filename for info in archive.infolist() if not info.is_dir()]
     except (zipfile.BadZipFile, OSError) as exc:
-        raise NwjsError(f"Arquivo ZIP do NW.js invalido: {exc}") from exc
+        raise NwjsError(tr("nwjs.invalid_zip", error=exc)) from exc
 
     if not names:
-        raise NwjsError("Arquivo ZIP do NW.js esta vazio.")
+        raise NwjsError(tr("nwjs.empty_zip"))
 
     top_parts = {name.split("/", 1)[0] for name in names if "/" in name}
     prefix = ""
@@ -338,7 +339,7 @@ def _validate_archive(zip_path: Path) -> tuple[str, list[str]]:
 
     rel_lower = {name[len(prefix):].lower() for name in names}
     if "nw.exe" not in rel_lower or "nw.dll" not in rel_lower:
-        raise NwjsError("O arquivo ZIP baixado nao contem nw.exe e nw.dll.")
+        raise NwjsError(tr("nwjs.missing_binaries"))
     return prefix, names
 
 
@@ -356,7 +357,7 @@ def download_archive(
             try:
                 _validate_archive(target)
                 if status:
-                    status(f"Pacote NW.js {release.version} ({release.arch}) ja esta no cache de downloads.")
+                    status(tr("nwjs.archive_cached", version=release.version, arch=release.arch))
                 return target
             except NwjsError:
                 target.unlink(missing_ok=True)
@@ -365,7 +366,7 @@ def download_archive(
 
     temporary = target.with_suffix(target.suffix + ".part")
     if status:
-        status(f"Baixando NW.js {release.version} ({release.arch}) de dl.nwjs.io ...")
+        status(tr("nwjs.downloading", version=release.version, arch=release.arch))
     try:
         with _request(release.url, timeout=120) as response, open(temporary, "wb") as handle:
             total = int(response.headers.get("Content-Length") or 0)
@@ -380,20 +381,17 @@ def download_archive(
                     progress(downloaded, total)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         temporary.unlink(missing_ok=True)
-        raise NwjsError(f"Falha ao baixar o NW.js: {exc}") from exc
+        raise NwjsError(tr("nwjs.download_failed", error=exc)) from exc
 
     if temporary.stat().st_size < 10_000_000:
         temporary.unlink(missing_ok=True)
-        raise NwjsError("O download do NW.js veio incompleto.")
+        raise NwjsError(tr("nwjs.download_incomplete"))
 
     if expected_sha:
         actual_sha = winapi.sha256_file(temporary).lower()
         if actual_sha != expected_sha:
             temporary.unlink(missing_ok=True)
-            raise NwjsError(
-                "Checksum SHA-256 do pacote NW.js nao confere com o oficial em dl.nwjs.io. "
-                "Tente baixar novamente."
-            )
+            raise NwjsError(tr("nwjs.sha_mismatch"))
 
     try:
         _validate_archive(temporary)
@@ -403,7 +401,7 @@ def download_archive(
 
     temporary.replace(target)
     if status:
-        status(f"NW.js {release.version} baixado ({target.stat().st_size / 1048576:.1f} MB).")
+        status(tr("nwjs.downloaded", version=release.version, mb=target.stat().st_size / 1048576))
     return target
 
 
@@ -417,7 +415,7 @@ def cache_from_archive(zip_path: Path, release: NwjsRelease, status: Status | No
     runtime_tmp.mkdir(parents=True, exist_ok=True)
 
     if status:
-        status(f"Extraindo NW.js {release.version} para o cache local ...")
+        status(tr("nwjs.extracting", version=release.version))
 
     extracted_files: list[str] = []
     try:
@@ -439,7 +437,7 @@ def cache_from_archive(zip_path: Path, release: NwjsRelease, status: Status | No
                 extracted_files.append(rel)
 
         if not (runtime_tmp / "nw.exe").is_file() or not (runtime_tmp / "nw.dll").is_file():
-            raise NwjsError("Extracao do NW.js incompleta (nw.exe ou nw.dll ausente).")
+            raise NwjsError(tr("nwjs.extract_incomplete"))
 
         meta = {
             "version": release.version,
@@ -485,29 +483,29 @@ def ensure_release(
         for item in cached:
             if item.version == preferred:
                 if status:
-                    status(f"Usando NW.js {item.version} ({item.arch}) do cache local.")
+                    status(tr("nwjs.using_cached", version=item.version, arch=item.arch))
                 return item
     elif cached:
         if status:
-            status(f"Usando NW.js {cached[0].version} ({cached[0].arch}) do cache local.")
+            status(tr("nwjs.using_cached", version=cached[0].version, arch=cached[0].arch))
         return cached[0]
 
     if not allow_network:
         if cached:
             return cached[0]
-        raise NwjsError("Nenhuma versao do NW.js esta no cache e a rede esta desativada.")
+        raise NwjsError(tr("nwjs.no_cache_offline"))
 
     if preferred:
         release = build_release(preferred, arch=arch)
     else:
         if status:
-            status("Consultando a versao estavel mais recente do NW.js em nwjs.io ...")
+            status(tr("nwjs.checking_latest"))
         try:
             release = fetch_latest_release(arch=arch)
         except NwjsError:
             if cached:
                 if status:
-                    status("Sem conexao com nwjs.io; usando o NW.js em cache.")
+                    status(tr("nwjs.offline_fallback"))
                 return cached[0]
             raise
 
@@ -630,8 +628,8 @@ def _load_package_json(path: Path) -> tuple[dict, bool]:
         if isinstance(data, dict):
             return data, True
     except ValueError as exc:
-        raise NwjsError(f"package.json invalido ({path.name}): {exc}") from exc
-    raise NwjsError(f"package.json invalido ({path.name}): raiz nao e um objeto JSON.")
+        raise NwjsError(tr("nwjs.invalid_package_json", name=path.name, error=exc)) from exc
+    raise NwjsError(tr("nwjs.invalid_package_root", name=path.name))
 
 
 def _is_valid_package_name(name: object) -> bool:
@@ -671,14 +669,14 @@ def _fix_chromium_args(raw_value: object) -> tuple[str, list[str]]:
         args = ""
     elif isinstance(raw_value, list):
         args = " ".join(str(item).strip() for item in raw_value if str(item).strip())
-        fixes.append("chromium-args convertido de lista para string")
+        fixes.append(tr("nwjs.fix_chromium_args_list"))
     else:
         args = str(raw_value).strip()
 
     if "--autoplay-policy" not in args.lower():
         flag = "--autoplay-policy=no-user-gesture-required"
         args = f"{args} {flag}".strip() if args else flag
-        fixes.append("adicionado --autoplay-policy=no-user-gesture-required (evita audio mudo)")
+        fixes.append(tr("nwjs.fix_autoplay"))
     return args, fixes
 
 
@@ -700,7 +698,7 @@ def _fix_js_flags(raw_value: object) -> tuple[str | None, list[str]]:
             kept.append(token)
 
     if removed:
-        fixes.append("removidas flags V8 obsoletas de js-flags (" + ", ".join(removed) + ")")
+        fixes.append(tr("nwjs.fix_js_flags", flags=", ".join(removed)))
     return (" ".join(kept) if kept else None), fixes
 
 
@@ -723,11 +721,11 @@ def fix_package_json_dict(
     current_name = fixed.get("name")
     if forced_name and not _is_valid_package_name(current_name):
         fixed["name"] = forced_name
-        fixes.append(f'definido "name": "{forced_name}" em package.json')
+        fixes.append(tr("nwjs.fix_set_name", name=forced_name))
     elif not _is_valid_package_name(current_name):
         generated = forced_name or _generate_package_name(game_dir, window_title)
         fixed["name"] = generated
-        fixes.append(f'corrigido "name" ausente/invalido para "{generated}"')
+        fixes.append(tr("nwjs.fix_missing_name", name=generated))
 
     # 2. main entry point
     main_val = str(fixed.get("main") or "").strip()
@@ -736,7 +734,7 @@ def fix_package_json_dict(
         for candidate in candidates:
             if (base_dir / candidate).is_file():
                 fixed["main"] = candidate
-                fixes.append(f'corrigido "main" para "{candidate}"')
+                fixes.append(tr("nwjs.fix_main", main=candidate))
                 break
 
     # 3. chromium-args (autoplay policy + string type)
@@ -762,7 +760,7 @@ def fix_package_json_dict(
             val = win_copy.get(dim)
             if isinstance(val, str) and val.strip().isdigit():
                 win_copy[dim] = int(val.strip())
-                fixes.append(f'convertido window.{dim} para inteiro')
+                fixes.append(tr("nwjs.fix_window_dim", dim=dim))
         icon = win_copy.get("icon")
         if isinstance(icon, str) and icon.strip() and not (base_dir / icon).is_file():
             fallback_icons = ("www/icon/icon.png", "icon/icon.png") if is_root else ("icon/icon.png",)
@@ -770,18 +768,18 @@ def fix_package_json_dict(
             for candidate in fallback_icons:
                 if (base_dir / candidate).is_file():
                     win_copy["icon"] = candidate
-                    fixes.append(f'corrigido window.icon para "{candidate}"')
+                    fixes.append(tr("nwjs.fix_window_icon", icon=candidate))
                     replaced = True
                     break
             if not replaced:
                 win_copy.pop("icon", None)
-                fixes.append("removido window.icon apontando para arquivo inexistente")
+                fixes.append(tr("nwjs.fix_remove_icon"))
         fixed["window"] = win_copy
 
     # 6. inject_js_start for process.mainModule polyfill (root only, non-invasive)
     if is_root and not fixed.get("inject_js_start"):
         fixed["inject_js_start"] = COMPAT_SHIM_FILE
-        fixes.append("adicionado shim de compatibilidade process.mainModule para MV/plugins antigos")
+        fixes.append(tr("nwjs.fix_compat_shim"))
 
     return fixed, fixes
 
@@ -800,7 +798,7 @@ def fix_game_package_jsons(game_dir: Path, write_fn) -> tuple[list[str], list[st
     if not root_pkg.is_file() and www_pkg.is_file():
         www_data, syntax_fix = _load_package_json(www_pkg)
         if syntax_fix:
-            fixes.append("normalizado JSON/BOM em www/package.json")
+            fixes.append(tr("nwjs.fix_www_bom"))
         root_data = dict(www_data)
         if root_data.get("main") == "index.html" and (game_dir / "www" / "index.html").is_file():
             root_data["main"] = "www/index.html"
@@ -810,14 +808,14 @@ def fix_game_package_jsons(game_dir: Path, write_fn) -> tuple[list[str], list[st
             if isinstance(icon, str) and icon and not icon.startswith("www/") and (game_dir / "www" / icon).is_file():
                 win["icon"] = "www/" + icon
             root_data["window"] = win
-        fixes.append("criado package.json na raiz a partir de www/package.json")
+        fixes.append(tr("nwjs.fix_root_from_www"))
     elif root_pkg.is_file():
         root_data, syntax_fix = _load_package_json(root_pkg)
         if syntax_fix:
-            fixes.append("normalizado JSON/BOM em package.json")
+            fixes.append(tr("nwjs.fix_root_bom"))
     else:
         root_data = {}
-        fixes.append("criado package.json padrao na raiz")
+        fixes.append(tr("nwjs.fix_root_default"))
 
     fixed_root, root_fixes = fix_package_json_dict(root_data, game_dir, game_dir, is_root=True)
     fixes.extend(root_fixes)
@@ -833,7 +831,7 @@ def fix_game_package_jsons(game_dir: Path, write_fn) -> tuple[list[str], list[st
         try:
             www_data, www_syntax = _load_package_json(www_pkg)
             if www_syntax:
-                fixes.append("normalizado JSON/BOM em www/package.json")
+                fixes.append(tr("nwjs.fix_www_bom"))
             fixed_www, www_fixes = fix_package_json_dict(
                 www_data,
                 www_pkg.parent,
@@ -867,10 +865,7 @@ def _safe_write(path: Path, data: bytes) -> None:
             temporary.unlink(missing_ok=True)
         except OSError:
             pass
-        raise PermissionError(
-            f"Sem permissao para escrever em {path.parent}.\n"
-            "Feche o jogo e execute o AniShade como administrador."
-        ) from exc
+        raise PermissionError(tr("installer.no_write_perm", folder=path.parent)) from exc
 
 
 def _copy_if_missing_in_backup(src: Path, backup_root: Path, rel: str) -> None:
@@ -921,9 +916,9 @@ def update_game_nwjs(
             status(message)
 
     if not exe.is_file():
-        raise NwjsError(f"Executavel nao encontrado: {exe}")
+        raise NwjsError(tr("installer.exe_not_found", exe=exe))
     if winapi.process_running(exe.name):
-        raise NwjsError(f"{exe.name} esta em execucao. Feche o jogo antes de atualizar o NW.js.")
+        raise NwjsError(tr("nwjs.game_running_update", exe=exe.name))
 
     previous_record = load_update_record(game_id)
     previous_version = detect_game_nwjs_version(game_dir, exe, game_id)
@@ -939,7 +934,7 @@ def update_game_nwjs(
     first_backup = not previous_record
     if first_backup:
         backup_root.mkdir(parents=True, exist_ok=True)
-        log("Fazendo backup dos arquivos originais do NW.js ...")
+        log(tr("nwjs.backing_up"))
         _copy_if_missing_in_backup(exe, backup_root, exe.name)
         for pkg_rel in ("package.json", "www/package.json"):
             _copy_if_missing_in_backup(game_dir / pkg_rel, backup_root, pkg_rel)
@@ -977,7 +972,7 @@ def update_game_nwjs(
             shutil.rmtree(entry, ignore_errors=True)
 
     # Deploy new NW.js runtime files
-    log(f"Aplicando NW.js {cached.version} ({cached.arch}) em {game_dir.name} ...")
+    log(tr("nwjs.applying", version=cached.version, arch=cached.arch, folder=game_dir.name))
     installed_files: list[str] = []
     warnings: list[str] = []
     exe_is_nw = exe.name.lower() == "nw.exe"
@@ -999,13 +994,13 @@ def update_game_nwjs(
 
             dest = game_dir / rel
             if _is_reshade_dll_fast(dest):
-                warnings.append(f"{rel} pertence ao ReShade e foi preservada.")
+                warnings.append(tr("nwjs.reshade_preserved", file=rel))
                 continue
             _safe_write(dest, src_file.read_bytes())
             installed_files.append(rel)
 
     # Fix package.json compatibility issues + write compat shim
-    log("Verificando e corrigindo package.json ...")
+    log(tr("nwjs.fixing_package_json"))
     fixes_applied, _touched = fix_game_package_jsons(game_dir, write_fn=_safe_write)
 
     # Record backup & installed file list for clean restore
@@ -1024,7 +1019,7 @@ def update_game_nwjs(
     }
     save_update_record(game_id, record)
 
-    log(f"NW.js atualizado para {cached.version} ({cached.bits} bits).")
+    log(tr("nwjs.updated_log", version=cached.version, bits=cached.bits))
     return NwjsUpdateReport(
         version=cached.version,
         arch=cached.arch,
@@ -1051,9 +1046,9 @@ def restore_game_nwjs(
     backup_dir_str = record.get("backup_dir") or ""
     backup_root = Path(backup_dir_str) if backup_dir_str else Path()
     if not record or not backup_dir_str or not backup_root.is_dir():
-        raise NwjsError("Nao ha backup do NW.js original para este jogo.")
+        raise NwjsError(tr("nwjs.no_backup"))
     if exe.is_file() and winapi.process_running(exe.name):
-        raise NwjsError(f"{exe.name} esta em execucao. Feche o jogo antes de restaurar o NW.js.")
+        raise NwjsError(tr("nwjs.game_running_restore", exe=exe.name))
 
     restored: list[str] = []
     backup_files: set[str] = set()
@@ -1096,5 +1091,5 @@ def restore_game_nwjs(
 
     shutil.rmtree(backup_root, ignore_errors=True)
     update_record_path(game_id).unlink(missing_ok=True)
-    log(f"NW.js original restaurado ({len(restored)} arquivos).")
+    log(tr("nwjs.restored_log", count=len(restored)))
     return restored

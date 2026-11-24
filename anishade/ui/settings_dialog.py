@@ -1,4 +1,4 @@
-"""Preferences dialog: ReShade/NW.js cache management and default choices."""
+"""Preferences dialog: language, ReShade/NW.js/URM cache management, and default choices."""
 
 from __future__ import annotations
 
@@ -19,7 +19,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import anime4k, nwjs, paths, renpy, reshade, winapi
+from .. import anime4k, i18n, nwjs, paths, renpy, reshade, winapi
+from ..i18n import tr
 from ..store import Store
 from .theme import MUTED
 from .widgets import Card, Divider
@@ -32,9 +33,9 @@ class SettingsDialog(QDialog):
         self.store = store
         self.settings = store.settings
         self.task = None
-        self.setWindowTitle("Configurações — AniShade")
+        self.setWindowTitle(tr("settings.title"))
         self.setMinimumWidth(650)
-        self.resize(670, 680)
+        self.resize(670, 720)
         self.setModal(True)
 
         layout = QVBoxLayout(self)
@@ -48,6 +49,7 @@ class SettingsDialog(QDialog):
         body = QVBoxLayout(content)
         body.setContentsMargins(2, 2, 8, 2)
         body.setSpacing(12)
+        body.addWidget(self._build_general_card())
         body.addWidget(self._build_reshade_card())
         body.addWidget(self._build_nwjs_card())
         body.addWidget(self._build_urm_card())
@@ -58,9 +60,9 @@ class SettingsDialog(QDialog):
         layout.addWidget(scroll, 1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Save).setText("Salvar")
+        buttons.button(QDialogButtonBox.Save).setText(tr("common.save"))
         buttons.button(QDialogButtonBox.Save).setObjectName("primary")
-        buttons.button(QDialogButtonBox.Cancel).setText("Cancelar")
+        buttons.button(QDialogButtonBox.Cancel).setText(tr("common.cancel"))
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -70,8 +72,31 @@ class SettingsDialog(QDialog):
         self._refresh_urm_cache_info()
 
     # -- cards -----------------------------------------------------------
+    def _build_general_card(self) -> Card:
+        card = Card(tr("settings.general_card"))
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        label = QLabel(tr("settings.language"))
+        label.setObjectName("muted")
+        self.language_combo = QComboBox()
+        self.language_combo.setMinimumWidth(260)
+        for code, display in i18n.SUPPORTED_LANGUAGES:
+            self.language_combo.addItem(display, code)
+        index = self.language_combo.findData(i18n.normalize_language(self.settings.language))
+        self.language_combo.setCurrentIndex(max(0, index))
+        row.addWidget(label)
+        row.addWidget(self.language_combo, 1)
+        card.add_layout(row)
+
+        hint = QLabel(tr("settings.language_hint"))
+        hint.setObjectName("muted")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("font-size: 8.5pt;")
+        card.add(hint)
+        return card
+
     def _build_reshade_card(self) -> Card:
-        card = Card("ReShade")
+        card = Card(tr("settings.reshade_card"))
         self.cache_label = QLabel()
         self.cache_label.setObjectName("muted")
         self.cache_label.setWordWrap(True)
@@ -79,7 +104,7 @@ class SettingsDialog(QDialog):
 
         row = QHBoxLayout()
         row.setSpacing(8)
-        label = QLabel("Versão usada")
+        label = QLabel(tr("settings.version_used"))
         label.setObjectName("muted")
         self.version_combo = QComboBox()
         self.version_combo.setMinimumWidth(260)
@@ -89,12 +114,12 @@ class SettingsDialog(QDialog):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self.download_button = QPushButton("Baixar / atualizar agora")
+        self.download_button = QPushButton(tr("settings.download_now"))
         self.download_button.setObjectName("primary")
         self.download_button.clicked.connect(self._download)
-        self.prune_button = QPushButton("Remover versões antigas")
+        self.prune_button = QPushButton(tr("settings.prune_old"))
         self.prune_button.clicked.connect(self._prune)
-        self.open_cache_button = QPushButton("Abrir pasta de cache")
+        self.open_cache_button = QPushButton(tr("settings.open_cache"))
         self.open_cache_button.setObjectName("ghost")
         self.open_cache_button.clicked.connect(lambda: winapi.open_folder(paths.RESHADE_CACHE_DIR))
         actions.addWidget(self.download_button)
@@ -117,7 +142,7 @@ class SettingsDialog(QDialog):
         return card
 
     def _build_nwjs_card(self) -> Card:
-        card = Card("NW.js (RPG Maker MV/MZ)")
+        card = Card(tr("settings.nwjs_card"))
         self.nwjs_cache_label = QLabel()
         self.nwjs_cache_label.setObjectName("muted")
         self.nwjs_cache_label.setWordWrap(True)
@@ -125,7 +150,7 @@ class SettingsDialog(QDialog):
 
         row = QHBoxLayout()
         row.setSpacing(8)
-        label = QLabel("Versão usada")
+        label = QLabel(tr("settings.version_used"))
         label.setObjectName("muted")
         self.nwjs_version_combo = QComboBox()
         self.nwjs_version_combo.setMinimumWidth(260)
@@ -135,12 +160,12 @@ class SettingsDialog(QDialog):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self.nwjs_download_button = QPushButton("Baixar / atualizar agora")
+        self.nwjs_download_button = QPushButton(tr("settings.download_now"))
         self.nwjs_download_button.setObjectName("primary")
         self.nwjs_download_button.clicked.connect(self._download_nwjs)
-        self.nwjs_prune_button = QPushButton("Remover versões antigas")
+        self.nwjs_prune_button = QPushButton(tr("settings.prune_old"))
         self.nwjs_prune_button.clicked.connect(self._prune_nwjs)
-        self.nwjs_open_cache_button = QPushButton("Abrir pasta de cache")
+        self.nwjs_open_cache_button = QPushButton(tr("settings.open_cache"))
         self.nwjs_open_cache_button.setObjectName("ghost")
         self.nwjs_open_cache_button.clicked.connect(lambda: winapi.open_folder(paths.NWJS_CACHE_DIR))
         actions.addWidget(self.nwjs_download_button)
@@ -163,7 +188,7 @@ class SettingsDialog(QDialog):
         return card
 
     def _build_urm_card(self) -> Card:
-        card = Card("Universal Ren'Py Mod (Ren'Py)")
+        card = Card(tr("settings.urm_card"))
         self.urm_cache_label = QLabel()
         self.urm_cache_label.setObjectName("muted")
         self.urm_cache_label.setWordWrap(True)
@@ -171,7 +196,7 @@ class SettingsDialog(QDialog):
 
         row = QHBoxLayout()
         row.setSpacing(8)
-        label = QLabel("Versão usada")
+        label = QLabel(tr("settings.version_used"))
         label.setObjectName("muted")
         self.urm_version_combo = QComboBox()
         self.urm_version_combo.setMinimumWidth(260)
@@ -181,12 +206,12 @@ class SettingsDialog(QDialog):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self.urm_download_button = QPushButton("Baixar / atualizar agora")
+        self.urm_download_button = QPushButton(tr("settings.download_now"))
         self.urm_download_button.setObjectName("primary")
         self.urm_download_button.clicked.connect(self._download_urm)
-        self.urm_prune_button = QPushButton("Remover versões antigas")
+        self.urm_prune_button = QPushButton(tr("settings.prune_old"))
         self.urm_prune_button.clicked.connect(self._prune_urm)
-        self.urm_open_cache_button = QPushButton("Abrir pasta de cache")
+        self.urm_open_cache_button = QPushButton(tr("settings.open_cache"))
         self.urm_open_cache_button.setObjectName("ghost")
         self.urm_open_cache_button.clicked.connect(lambda: winapi.open_folder(paths.URM_CACHE_DIR))
         actions.addWidget(self.urm_download_button)
@@ -209,10 +234,10 @@ class SettingsDialog(QDialog):
         return card
 
     def _build_defaults_card(self) -> Card:
-        card = Card("Padrões para novos jogos")
+        card = Card(tr("settings.defaults_card"))
         row = QHBoxLayout()
         row.setSpacing(8)
-        label = QLabel("Variante")
+        label = QLabel(tr("settings.variant"))
         label.setObjectName("muted")
         self.variant_combo = QComboBox()
         for variant in anime4k.VARIANTS:
@@ -225,42 +250,34 @@ class SettingsDialog(QDialog):
 
         row2 = QHBoxLayout()
         row2.setSpacing(8)
-        label2 = QLabel("Margem superior padrão")
+        label2 = QLabel(tr("settings.default_top_margin"))
         label2.setObjectName("muted")
         self.margin_spin = QSpinBox()
         self.margin_spin.setRange(0, 200)
         self.margin_spin.setSuffix(" px")
         self.margin_spin.setValue(int(self.settings.default_top_margin))
-        self.margin_spin.setToolTip("Pixels do topo ignorados (barra de título em jogos NW.js). 0 em fullscreen.")
+        self.margin_spin.setToolTip(tr("settings.default_top_margin_tooltip"))
         row2.addWidget(label2)
         row2.addWidget(self.margin_spin, 1)
         card.add_layout(row2)
 
-        self.launcher_check = QCheckBox("Criar launcher .bat com correções do engine")
+        self.launcher_check = QCheckBox(tr("settings.create_launcher"))
         self.launcher_check.setChecked(self.settings.create_launcher)
         card.add(self.launcher_check)
 
-        self.rpgmaker_plugin_check = QCheckBox(
-            "Instalar plugin para ocultar caixa de texto (tecla H) no RPG Maker MV/MZ"
-        )
+        self.rpgmaker_plugin_check = QCheckBox(tr("settings.rpgm_hide_textbox"))
         self.rpgmaker_plugin_check.setChecked(self.settings.rpgmaker_hide_textbox)
         card.add(self.rpgmaker_plugin_check)
 
-        self.rpgmaker_no_alt_check = QCheckBox(
-            "Impedir tecla Alt / Alt+Tab de pular texto no RPG Maker MV/MZ"
-        )
+        self.rpgmaker_no_alt_check = QCheckBox(tr("settings.rpgm_no_alt"))
         self.rpgmaker_no_alt_check.setChecked(self.settings.rpgmaker_no_alt_skip)
         card.add(self.rpgmaker_no_alt_check)
 
-        self.rpgmaker_save_slots_check = QCheckBox(
-            "Expandir para 100 slots de save no RPG Maker MV/MZ"
-        )
+        self.rpgmaker_save_slots_check = QCheckBox(tr("settings.rpgm_save_slots"))
         self.rpgmaker_save_slots_check.setChecked(self.settings.rpgmaker_save_slots_100)
         card.add(self.rpgmaker_save_slots_check)
 
-        self.renpy_urm_check = QCheckBox(
-            "Instalar Universal Ren'Py Mod (0x52_URM.rpa) em novos jogos Ren'Py"
-        )
+        self.renpy_urm_check = QCheckBox(tr("settings.renpy_urm"))
         self.renpy_urm_check.setChecked(self.settings.renpy_urm)
         card.add(self.renpy_urm_check)
 
@@ -269,11 +286,11 @@ class SettingsDialog(QDialog):
 
         data_row = QHBoxLayout()
         data_row.setSpacing(8)
-        data_label = QLabel(f"Dados do app: {paths.DATA_DIR}")
+        data_label = QLabel(tr("settings.app_data", path=paths.DATA_DIR))
         data_label.setObjectName("muted")
         data_label.setWordWrap(True)
         data_row.addWidget(data_label, 1)
-        open_data = QPushButton("Abrir")
+        open_data = QPushButton(tr("common.open"))
         open_data.setObjectName("ghost")
         open_data.clicked.connect(lambda: winapi.open_folder(paths.DATA_DIR))
         data_row.addWidget(open_data)
@@ -281,13 +298,7 @@ class SettingsDialog(QDialog):
         return card
 
     def _build_about(self) -> QLabel:
-        label = QLabel(
-            "AniShade não redistribui binários. O ReShade é baixado de reshade.me, "
-            "o NW.js é baixado de dl.nwjs.io, o Universal Ren'Py Mod é baixado de 0x52.dev "
-            "(todos reutilizados via cache local), e os shaders Anime4K (bloc97/Anime4K, MIT) "
-            "acompanham o aplicativo.\n"
-            "Pressione Home no jogo para abrir o overlay do ReShade e ajustar o preset."
-        )
+        label = QLabel(tr("settings.about"))
         label.setObjectName("muted")
         label.setWordWrap(True)
         label.setStyleSheet(f"color: {MUTED}; font-size: 8.5pt;")
@@ -303,21 +314,20 @@ class SettingsDialog(QDialog):
         cached = reshade.list_cached()
         if cached:
             versions = ", ".join(item.version for item in cached)
-            self.cache_label.setText(f"Versões no cache local: {versions}.\nPasta: {paths.RESHADE_CACHE_DIR}")
-        else:
             self.cache_label.setText(
-                "Nenhuma versão do ReShade baixada ainda. Ela será obtida em reshade.me "
-                "na primeira instalação (ou clique em 'Baixar / atualizar agora')."
+                tr("settings.reshade_cache_present", versions=versions, folder=paths.RESHADE_CACHE_DIR)
             )
+        else:
+            self.cache_label.setText(tr("settings.reshade_cache_empty"))
 
         current = self.version_combo.currentData()
         self.version_combo.blockSignals(True)
         self.version_combo.clear()
-        self.version_combo.addItem("Mais recente (baixa se necessário)", "")
+        self.version_combo.addItem(tr("settings.reshade_latest_option"), "")
         for item in cached:
-            label = f"{item.version} (em cache)"
+            label = tr("settings.cached_suffix", version=item.version)
             if self.settings.reshade_version == item.version:
-                label += " — preferida"
+                label += tr("settings.preferred_suffix")
             self.version_combo.addItem(label, item.version)
         if current:
             index = self.version_combo.findData(current)
@@ -333,24 +343,23 @@ class SettingsDialog(QDialog):
     def _refresh_nwjs_cache_info(self) -> None:
         cached = nwjs.list_cached()
         if cached:
-            versions = ", ".join(f"{item.version} ({item.bits} bits)" for item in cached)
+            versions = ", ".join(
+                f"{item.version} ({tr('common.bits', bits=item.bits)})" for item in cached
+            )
             self.nwjs_cache_label.setText(
-                f"Versões no cache local: {versions}.\nPasta: {paths.NWJS_CACHE_DIR}"
+                tr("settings.nwjs_cache_present", versions=versions, folder=paths.NWJS_CACHE_DIR)
             )
         else:
-            self.nwjs_cache_label.setText(
-                "Nenhuma versão do NW.js baixada ainda. Ele será baixado de nwjs.io uma única vez "
-                "e reutilizado em todos os jogos RPG Maker MV/MZ."
-            )
+            self.nwjs_cache_label.setText(tr("settings.nwjs_cache_empty"))
 
         current = self.nwjs_version_combo.currentData()
         self.nwjs_version_combo.blockSignals(True)
         self.nwjs_version_combo.clear()
-        self.nwjs_version_combo.addItem("Mais recente estável (baixa se necessário)", "")
+        self.nwjs_version_combo.addItem(tr("settings.stable_latest_option"), "")
         for item in cached:
-            label = f"{item.version} ({item.bits} bits, em cache)"
+            label = tr("settings.nwjs_cached_item", version=item.version, bits=item.bits)
             if self.settings.nwjs_version == item.version:
-                label += " — preferida"
+                label += tr("settings.preferred_suffix")
             self.nwjs_version_combo.addItem(label, item.version)
         if current:
             index = self.nwjs_version_combo.findData(current)
@@ -368,22 +377,19 @@ class SettingsDialog(QDialog):
         if cached:
             versions = ", ".join(item.version for item in cached)
             self.urm_cache_label.setText(
-                f"Versões no cache local: {versions}.\nPasta: {paths.URM_CACHE_DIR}"
+                tr("settings.urm_cache_present", versions=versions, folder=paths.URM_CACHE_DIR)
             )
         else:
-            self.urm_cache_label.setText(
-                "Nenhuma versão do Universal Ren'Py Mod baixada ainda. Ele será obtido em 0x52.dev "
-                "uma única vez ao ativar o interruptor em um jogo Ren'Py."
-            )
+            self.urm_cache_label.setText(tr("settings.urm_cache_empty"))
 
         current = self.urm_version_combo.currentData()
         self.urm_version_combo.blockSignals(True)
         self.urm_version_combo.clear()
-        self.urm_version_combo.addItem("Mais recente estável (baixa se necessário)", "")
+        self.urm_version_combo.addItem(tr("settings.stable_latest_option"), "")
         for item in cached:
-            label = f"{item.version} (em cache)"
+            label = tr("settings.cached_suffix", version=item.version)
             if self.settings.urm_version == item.version:
-                label += " — preferida"
+                label += tr("settings.preferred_suffix")
             self.urm_version_combo.addItem(label, item.version)
         if current:
             index = self.urm_version_combo.findData(current)
@@ -417,7 +423,9 @@ class SettingsDialog(QDialog):
             if total > 0:
                 self.progress.setRange(0, 100)
                 self.progress.setValue(int(done * 100 / total))
-                self.download_status.setText(f"Baixando... {done / 1048576:.1f} / {total / 1048576:.1f} MB")
+                self.download_status.setText(
+                    tr("settings.downloading_progress", done=done / 1048576, total=total / 1048576)
+                )
             else:
                 self.progress.setRange(0, 0)
 
@@ -426,15 +434,23 @@ class SettingsDialog(QDialog):
             self.progress.setRange(0, 100)
             self.progress.setValue(100)
             self._set_downloading(False)
-            self.download_status.setText(f"ReShade {release.version} pronto em {release.folder}")
+            self.download_status.setText(
+                tr("settings.reshade_ready", version=release.version, folder=release.folder)
+            )
             self._refresh_cache_info()
 
         def on_error(message: str, trace: str, error: object | None = None) -> None:
             self.task = None
             self.progress.hide()
             self._set_downloading(False)
-            self.download_status.setText(f"Falha: {message}")
-            box = QMessageBox(QMessageBox.Critical, "Falha no download", message, QMessageBox.Ok, self)
+            self.download_status.setText(tr("settings.download_failed", message=message))
+            box = QMessageBox(
+                QMessageBox.Critical,
+                tr("settings.download_failed_title"),
+                message,
+                QMessageBox.Ok,
+                self,
+            )
             box.setDetailedText(trace)
             box.exec()
 
@@ -453,7 +469,7 @@ class SettingsDialog(QDialog):
             cached = nwjs.list_cached(arch=nwjs.DEFAULT_ARCH)
             for item in cached:
                 if item.version == release.version:
-                    log(f"NW.js {item.version} ja e a versao estavel mais recente em cache.")
+                    log(tr("settings.nwjs_already_latest", version=item.version))
                     return item
             archive = nwjs.download_archive(release, progress=progress, status=log)
             return nwjs.cache_from_archive(archive, release, status=log)
@@ -462,7 +478,9 @@ class SettingsDialog(QDialog):
             if total > 0:
                 self.nwjs_progress.setRange(0, 100)
                 self.nwjs_progress.setValue(int(done * 100 / total))
-                self.nwjs_status.setText(f"Baixando NW.js... {done / 1048576:.1f} / {total / 1048576:.1f} MB")
+                self.nwjs_status.setText(
+                    tr("settings.nwjs_downloading_progress", done=done / 1048576, total=total / 1048576)
+                )
             else:
                 self.nwjs_progress.setRange(0, 0)
 
@@ -471,15 +489,23 @@ class SettingsDialog(QDialog):
             self.nwjs_progress.setRange(0, 100)
             self.nwjs_progress.setValue(100)
             self._set_downloading(False)
-            self.nwjs_status.setText(f"NW.js {cached_build.version} ({cached_build.bits} bits) pronto no cache.")
+            self.nwjs_status.setText(
+                tr("settings.nwjs_ready", version=cached_build.version, bits=cached_build.bits)
+            )
             self._refresh_nwjs_cache_info()
 
         def on_error(message: str, trace: str, error: object | None = None) -> None:
             self.task = None
             self.nwjs_progress.hide()
             self._set_downloading(False)
-            self.nwjs_status.setText(f"Falha: {message}")
-            box = QMessageBox(QMessageBox.Critical, "Falha no download do NW.js", message, QMessageBox.Ok, self)
+            self.nwjs_status.setText(tr("settings.download_failed", message=message))
+            box = QMessageBox(
+                QMessageBox.Critical,
+                tr("settings.nwjs_download_failed_title"),
+                message,
+                QMessageBox.Ok,
+                self,
+            )
             box.setDetailedText(trace)
             box.exec()
 
@@ -498,7 +524,7 @@ class SettingsDialog(QDialog):
             cached = renpy.list_cached()
             for item in cached:
                 if item.version == release.version:
-                    log(f"Universal Ren'Py Mod {item.version} ja e a versao estavel mais recente em cache.")
+                    log(tr("settings.urm_already_latest", version=item.version))
                     return item
             archive = renpy.download_archive(release, progress=progress, status=log)
             return renpy.cache_from_archive(archive, release)
@@ -508,7 +534,7 @@ class SettingsDialog(QDialog):
                 self.urm_progress.setRange(0, 100)
                 self.urm_progress.setValue(int(done * 100 / total))
                 self.urm_status.setText(
-                    f"Baixando URM... {done / 1048576:.1f} / {total / 1048576:.1f} MB"
+                    tr("settings.urm_downloading_progress", done=done / 1048576, total=total / 1048576)
                 )
             else:
                 self.urm_progress.setRange(0, 0)
@@ -518,17 +544,17 @@ class SettingsDialog(QDialog):
             self.urm_progress.setRange(0, 100)
             self.urm_progress.setValue(100)
             self._set_downloading(False)
-            self.urm_status.setText(f"Universal Ren'Py Mod {cached_build.version} pronto no cache.")
+            self.urm_status.setText(tr("settings.urm_ready", version=cached_build.version))
             self._refresh_urm_cache_info()
 
         def on_error(message: str, trace: str, error: object | None = None) -> None:
             self.task = None
             self.urm_progress.hide()
             self._set_downloading(False)
-            self.urm_status.setText(f"Falha: {message}")
+            self.urm_status.setText(tr("settings.download_failed", message=message))
             box = QMessageBox(
                 QMessageBox.Critical,
-                "Falha no download do Universal Ren'Py Mod",
+                tr("settings.urm_download_failed_title"),
                 message,
                 QMessageBox.Ok,
                 self,
@@ -543,23 +569,26 @@ class SettingsDialog(QDialog):
         self._refresh_cache_info()
         if removed:
             self.download_status.show()
-            self.download_status.setText("Removidas: " + ", ".join(removed))
+            self.download_status.setText(tr("settings.pruned", items=", ".join(removed)))
 
     def _prune_nwjs(self) -> None:
         removed = nwjs.prune_cache(keep=1)
         self._refresh_nwjs_cache_info()
         if removed:
             self.nwjs_status.show()
-            self.nwjs_status.setText("Removidas: " + ", ".join(removed))
+            self.nwjs_status.setText(tr("settings.pruned", items=", ".join(removed)))
 
     def _prune_urm(self) -> None:
         removed = renpy.prune_cache(keep=1)
         self._refresh_urm_cache_info()
         if removed:
             self.urm_status.show()
-            self.urm_status.setText("Removidas: " + ", ".join(removed))
+            self.urm_status.setText(tr("settings.pruned", items=", ".join(removed)))
 
     def _save(self) -> None:
+        selected_lang = i18n.normalize_language(self.language_combo.currentData())
+        self.settings.language = selected_lang
+        i18n.set_language(selected_lang)
         self.settings.reshade_version = self.version_combo.currentData() or ""
         self.settings.nwjs_version = self.nwjs_version_combo.currentData() or ""
         self.settings.urm_version = self.urm_version_combo.currentData() or ""
@@ -577,8 +606,8 @@ class SettingsDialog(QDialog):
         if self.task is not None:
             QMessageBox.information(
                 self,
-                "Download em andamento",
-                "Aguarde o download terminar antes de fechar.",
+                tr("settings.download_in_progress_title"),
+                tr("settings.download_in_progress_body"),
             )
             event.ignore()
             return

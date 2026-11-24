@@ -291,7 +291,7 @@ def _convert_matrices(text: str) -> str:
                 depth -= 1
             index += 1
         if depth:
-            raise ConversionError("parentese nao fechado em construtor de matriz")
+            raise ConversionError("unclosed parenthesis in matrix constructor")
         inner = text[start : index - 1]
         args = _split_top_level(inner)
         operand, end = _read_operand(text, index)
@@ -330,7 +330,7 @@ def to_hlsl(text: str) -> str:
 def _find_hook(body: str) -> tuple[str, str]:
     match = re.search(r"\bvec4\s+hook\s*\(\s*\)\s*\{", body)
     if not match:
-        raise ConversionError("funcao hook() nao encontrada")
+        raise ConversionError("hook() function not found")
     start = match.end()
     depth = 1
     index = start
@@ -341,7 +341,7 @@ def _find_hook(body: str) -> tuple[str, str]:
             depth -= 1
         index += 1
     if depth:
-        raise ConversionError("hook() sem chave de fechamento")
+        raise ConversionError("hook() missing closing brace")
     return body[: match.start()], body[start : index - 1]
 
 
@@ -372,11 +372,11 @@ def _dedupe(text: str) -> str:
 def convert(text: str, source_name: str = "", technique: str | None = None) -> str:
     header, blocks = split_blocks(text)
     if not blocks:
-        raise ConversionError("nenhum bloco //!DESC")
+        raise ConversionError("no //!DESC block found")
 
     technique_name = technique or Path(source_name).stem
     if not technique_name:
-        raise ConversionError("nome da tecnica ausente")
+        raise ConversionError("missing technique name")
 
     # textures written by //!SAVE
     saved: dict[str, int] = {}
@@ -395,7 +395,7 @@ def convert(text: str, source_name: str = "", technique: str | None = None) -> s
                 bound_aliases["MAIN"] = "sampInput"
             else:
                 if name not in saved:
-                    raise ConversionError(f"BIND em textura desconhecida: {name}")
+                    raise ConversionError(f"BIND on unknown texture: {name}")
                 bound_aliases[name] = f"samp{name}"
         if block.hook in ("MAIN", "PREKERNEL"):
             bound_aliases.setdefault("MAIN", "sampInput")
@@ -476,7 +476,7 @@ def convert(text: str, source_name: str = "", technique: str | None = None) -> s
             bind_names.append("MAIN")
         for name in bind_names:
             if name not in bound_aliases:
-                raise ConversionError(f"pass {index}: textura nao declarada: {name}")
+                raise ConversionError(f"pass {index}: undeclared texture: {name}")
 
         body = to_hlsl(hook_body)
         is_final = block.save in ("", "MAIN")

@@ -41,6 +41,7 @@ from .. import (
     anime4k,
     detect,
     engines,
+    i18n,
     installer,
     nwjs,
     renpy,
@@ -48,6 +49,7 @@ from .. import (
     rpgmaker,
     winapi,
 )
+from ..i18n import tr
 from ..store import Game, Store, game_id_for
 from .delegates import (
     ROLE_COST,
@@ -75,13 +77,14 @@ class MainWindow(QMainWindow):
     def __init__(self, store: Store) -> None:
         super().__init__()
         self.store = store
+        i18n.set_language(store.settings.language)
         self.current_game: Game | None = None
         self.analysis: detect.GameAnalysis | None = None
         self.task = None
         self._loading = False
         self._refreshing = False
 
-        self.setWindowTitle("AniShade — ReShade + Anime4K Restore")
+        self.setWindowTitle(tr("app.window_title"))
         self.setWindowIcon(app_icon())
         self.setAcceptDrops(True)
         self.resize(store.settings.window_width, store.settings.window_height)
@@ -105,9 +108,8 @@ class MainWindow(QMainWindow):
         root.addLayout(self._build_topbar())
 
         self.banner = Banner(
-            "O ReShade ainda não foi baixado. Ele será obtido do site oficial (reshade.me) "
-            "na primeira instalação — depois fica em cache para todos os jogos.",
-            "Baixar agora",
+            tr("banner.reshade_missing"),
+            tr("banner.download_now"),
             kind="warn",
         )
         self.banner.button.clicked.connect(self._download_reshade)
@@ -128,7 +130,7 @@ class MainWindow(QMainWindow):
         self.log_box.setReadOnly(True)
         self.log_box.setMaximumBlockCount(1200)
         self.log_box.setFixedHeight(120)
-        self.log_box.setPlaceholderText("O registro das operações aparece aqui (Ctrl+L).")
+        self.log_box.setPlaceholderText(tr("log.placeholder"))
         self.log_box.hide()
         root.addWidget(self.log_box)
 
@@ -149,34 +151,34 @@ class MainWindow(QMainWindow):
         titles.setSpacing(0)
         title = QLabel(APP_NAME)
         title.setObjectName("appTitle")
-        subtitle = QLabel("ReShade + Anime4K Restore para visual novels e jogos japoneses")
-        subtitle.setObjectName("appSubtitle")
+        self.app_subtitle_label = QLabel(tr("app.tagline"))
+        self.app_subtitle_label.setObjectName("appSubtitle")
         titles.addWidget(title)
-        titles.addWidget(subtitle)
+        titles.addWidget(self.app_subtitle_label)
         bar.addLayout(titles)
         bar.addStretch(1)
 
-        self.add_button = QPushButton("Adicionar jogo")
+        self.add_button = QPushButton(tr("topbar.add_game"))
         self.add_button.setObjectName("primary")
         self.add_button.setIcon(QIcon())
         self.add_button.clicked.connect(self._pick_game)
         bar.addWidget(self.add_button)
 
-        settings_button = QPushButton("Configurações")
-        settings_button.setObjectName("ghost")
-        settings_button.clicked.connect(self._open_settings)
-        bar.addWidget(settings_button)
+        self.settings_button = QPushButton(tr("topbar.settings"))
+        self.settings_button.setObjectName("ghost")
+        self.settings_button.clicked.connect(self._open_settings)
+        bar.addWidget(self.settings_button)
 
-        self.log_button = QPushButton("Registro")
+        self.log_button = QPushButton(tr("topbar.log"))
         self.log_button.setObjectName("ghost")
         self.log_button.setCheckable(True)
         self.log_button.toggled.connect(self._toggle_log)
         bar.addWidget(self.log_button)
 
-        version = QLabel(f"v{__version__}")
-        version.setObjectName("appSubtitle")
-        version.setToolTip("AniShade — ReShade + Anime4K Restore")
-        bar.addWidget(version)
+        self.version_label = QLabel(f"v{__version__}")
+        self.version_label.setObjectName("appSubtitle")
+        self.version_label.setToolTip(tr("app.window_title"))
+        bar.addWidget(self.version_label)
         return bar
 
     def _build_left_panel(self) -> QWidget:
@@ -186,7 +188,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(8)
 
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Buscar na biblioteca...")
+        self.search.setPlaceholderText(tr("library.search_placeholder"))
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self._apply_filter)
         layout.addWidget(self.search)
@@ -202,20 +204,17 @@ class MainWindow(QMainWindow):
         self.game_list.customContextMenuRequested.connect(self._game_context_menu)
         layout.addWidget(self.game_list, 1)
 
-        self.empty_hint = QLabel(
-            "Nenhum jogo ainda.\n\nClique em “Adicionar jogo” e aponte para o .exe do jogo, "
-            "ou arraste o executável para esta janela."
-        )
+        self.empty_hint = QLabel(tr("library.empty_hint"))
         self.empty_hint.setObjectName("muted")
         self.empty_hint.setAlignment(Qt.AlignCenter)
         self.empty_hint.setWordWrap(True)
         layout.addWidget(self.empty_hint, 1)
 
-        hint = QLabel("Duplo clique renomeia · Botão direito abre opções")
-        hint.setObjectName("muted")
-        hint.setStyleSheet("font-size: 8pt;")
-        hint.setAlignment(Qt.AlignCenter)
-        layout.addWidget(hint)
+        self.library_hint = QLabel(tr("library.hint"))
+        self.library_hint.setObjectName("muted")
+        self.library_hint.setStyleSheet("font-size: 8pt;")
+        self.library_hint.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.library_hint)
         return panel
 
     def _build_right_panel(self) -> QWidget:
@@ -225,14 +224,11 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         self.stack = QStackedWidget()
-        placeholder = QLabel(
-            "Selecione um jogo na lista para ver a detecção, escolher a variante do Anime4K "
-            "e instalar o ReShade."
-        )
-        placeholder.setObjectName("muted")
-        placeholder.setAlignment(Qt.AlignCenter)
-        placeholder.setWordWrap(True)
-        self.stack.addWidget(placeholder)
+        self.select_placeholder = QLabel(tr("library.select_placeholder"))
+        self.select_placeholder.setObjectName("muted")
+        self.select_placeholder.setAlignment(Qt.AlignCenter)
+        self.select_placeholder.setWordWrap(True)
+        self.stack.addWidget(self.select_placeholder)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -243,15 +239,18 @@ class MainWindow(QMainWindow):
         content_layout.setContentsMargins(2, 2, 10, 6)
         content_layout.setSpacing(12)
         content_layout.addWidget(self._build_game_header())
-        content_layout.addWidget(self._build_detection_card())
+        self.detection_card = self._build_detection_card()
+        content_layout.addWidget(self.detection_card)
         self.rpgmaker_card = self._build_rpgmaker_card()
         self.rpgmaker_card.hide()
         content_layout.addWidget(self.rpgmaker_card)
         self.renpy_card = self._build_renpy_card()
         self.renpy_card.hide()
         content_layout.addWidget(self.renpy_card)
-        content_layout.addWidget(self._build_shader_card())
-        content_layout.addWidget(self._build_install_card())
+        self.shader_card = self._build_shader_card()
+        content_layout.addWidget(self.shader_card)
+        self.install_card = self._build_install_card()
+        content_layout.addWidget(self.install_card)
         content_layout.addStretch(1)
         scroll.setWidget(content)
         self.stack.addWidget(scroll)
@@ -273,18 +272,18 @@ class MainWindow(QMainWindow):
         self.game_title.setTextInteractionFlags(Qt.TextSelectableByMouse)
         top.addWidget(self.game_title, 1)
 
-        self.play_button = QPushButton("Jogar")
+        self.play_button = QPushButton(tr("header.play"))
         self.play_button.setObjectName("primary")
-        self.play_button.setToolTip("Inicia o jogo com as correções de ambiente do engine")
+        self.play_button.setToolTip(tr("header.play_tooltip"))
         self.play_button.clicked.connect(self._launch_game)
         top.addWidget(self.play_button)
 
-        folder_button = QPushButton("Pasta")
-        folder_button.setObjectName("ghost")
-        folder_button.clicked.connect(self._open_game_folder)
-        top.addWidget(folder_button)
+        self.folder_button = QPushButton(tr("header.folder"))
+        self.folder_button.setObjectName("ghost")
+        self.folder_button.clicked.connect(self._open_game_folder)
+        top.addWidget(self.folder_button)
 
-        self.remove_button = QPushButton("Remover")
+        self.remove_button = QPushButton(tr("header.remove"))
         self.remove_button.setObjectName("ghost")
         self.remove_button.clicked.connect(self._remove_game)
         top.addWidget(self.remove_button)
@@ -301,9 +300,34 @@ class MainWindow(QMainWindow):
             label.setObjectName("muted")
         return label
 
+    def _populate_engine_combo(self) -> None:
+        current = self.engine_combo.currentData()
+        self.engine_combo.blockSignals(True)
+        self.engine_combo.clear()
+        self.engine_combo.addItem(tr("detection.auto_detect"), "")
+        for key, engine in sorted(engines.ENGINES.items(), key=lambda item: item[1].name):
+            self.engine_combo.addItem(engine.name, key)
+        if current:
+            idx = self.engine_combo.findData(current)
+            self.engine_combo.setCurrentIndex(max(0, idx))
+        self.engine_combo.blockSignals(False)
+
+    def _populate_api_combo(self) -> None:
+        current = self.api_combo.currentData()
+        self.api_combo.blockSignals(True)
+        self.api_combo.clear()
+        self.api_combo.addItem(tr("detection.auto_detect"), "")
+        for key, label in detect.API_LABELS.items():
+            if key not in ("unknown", "desconhecida"):
+                self.api_combo.addItem(label, key)
+        if current:
+            idx = self.api_combo.findData(current)
+            self.api_combo.setCurrentIndex(max(0, idx))
+        self.api_combo.blockSignals(False)
+
     def _build_detection_card(self) -> Card:
-        card = Card("Detecção")
-        self.reanalyze_button = QPushButton("Reanalisar")
+        card = Card(tr("detection.title"))
+        self.reanalyze_button = QPushButton(tr("detection.reanalyze"))
         self.reanalyze_button.setObjectName("chip")
         self.reanalyze_button.clicked.connect(self._reanalyze)
         card.add_header_widget(self.reanalyze_button)
@@ -313,36 +337,35 @@ class MainWindow(QMainWindow):
         grid.setVerticalSpacing(8)
         grid.setColumnStretch(2, 1)
 
-        grid.addWidget(self._label("Engine"), 0, 0)
+        self.detect_engine_label = self._label(tr("detection.engine"))
+        grid.addWidget(self.detect_engine_label, 0, 0)
         self.engine_combo = QComboBox()
         self.engine_combo.setMinimumWidth(240)
-        self.engine_combo.addItem("Detectar automaticamente", "")
-        for key, engine in sorted(engines.ENGINES.items(), key=lambda item: item[1].name):
-            self.engine_combo.addItem(engine.name, key)
+        self._populate_engine_combo()
         self.engine_combo.currentIndexChanged.connect(self._on_engine_override)
         grid.addWidget(self.engine_combo, 0, 1)
         self.engine_evidence = ElidedLabel("")
         self.engine_evidence.setObjectName("muted")
         grid.addWidget(self.engine_evidence, 0, 2)
 
-        grid.addWidget(self._label("API gráfica"), 1, 0)
+        self.detect_api_label = self._label(tr("detection.api"))
+        grid.addWidget(self.detect_api_label, 1, 0)
         self.api_combo = QComboBox()
         self.api_combo.setMinimumWidth(240)
-        self.api_combo.addItem("Detectar automaticamente", "")
-        for key, label in detect.API_LABELS.items():
-            if key != "desconhecida":
-                self.api_combo.addItem(label, key)
+        self._populate_api_combo()
         self.api_combo.currentIndexChanged.connect(self._on_api_override)
         grid.addWidget(self.api_combo, 1, 1)
         self.api_source = ElidedLabel("")
         self.api_source.setObjectName("muted")
         grid.addWidget(self.api_source, 1, 2)
 
-        grid.addWidget(self._label("Arquitetura"), 2, 0)
+        self.detect_arch_label = self._label(tr("detection.arch"))
+        grid.addWidget(self.detect_arch_label, 2, 0)
         self.arch_label = QLabel("—")
         grid.addWidget(self.arch_label, 2, 1, 1, 2)
 
-        grid.addWidget(self._label("ReShade"), 3, 0)
+        self.detect_reshade_label = self._label(tr("detection.reshade"))
+        grid.addWidget(self.detect_reshade_label, 3, 0)
         self.reshade_state = QLabel("—")
         grid.addWidget(self.reshade_state, 3, 1, 1, 2)
         card.add_layout(grid)
@@ -362,27 +385,25 @@ class MainWindow(QMainWindow):
         return card
 
     def _build_rpgmaker_card(self) -> Card:
-        card = Card("RPG Maker MV/MZ")
+        card = Card(tr("rpgmaker.title"))
 
         # 1. Immediate toggle for the Hide Textbox (H key) plugin
         plugin_row = QHBoxLayout()
         plugin_row.setSpacing(12)
         plugin_text = QVBoxLayout()
         plugin_text.setSpacing(2)
-        plugin_title = QLabel("Ocultar caixa de texto com a tecla H")
-        plugin_title.setStyleSheet("font-weight: 600;")
+        self.rpgm_hide_title = QLabel(tr("rpgmaker.hide_textbox_title"))
+        self.rpgm_hide_title.setStyleSheet("font-weight: 600;")
         self.rpgmaker_plugin_status = QLabel("—")
         self.rpgmaker_plugin_status.setObjectName("muted")
         self.rpgmaker_plugin_status.setWordWrap(True)
         self.rpgmaker_plugin_status.setStyleSheet("font-size: 8.6pt;")
-        plugin_text.addWidget(plugin_title)
+        plugin_text.addWidget(self.rpgm_hide_title)
         plugin_text.addWidget(self.rpgmaker_plugin_status)
         plugin_row.addLayout(plugin_text, 1)
 
         self.rpgmaker_plugin_toggle = ToggleSwitch()
-        self.rpgmaker_plugin_toggle.setToolTip(
-            "Ativa ou remove AniShade_HideTextbox.js em js/plugins/ e plugins.js imediatamente."
-        )
+        self.rpgmaker_plugin_toggle.setToolTip(tr("rpgmaker.hide_textbox_tooltip"))
         self.rpgmaker_plugin_toggle.toggled.connect(
             lambda checked: self._on_rpgmaker_plugin_toggled("hide_textbox", checked)
         )
@@ -396,21 +417,18 @@ class MainWindow(QMainWindow):
         alt_row.setSpacing(12)
         alt_text = QVBoxLayout()
         alt_text.setSpacing(2)
-        alt_title = QLabel("Impedir Alt de pular texto (Alt+Tab)")
-        alt_title.setStyleSheet("font-weight: 600;")
+        self.rpgm_no_alt_title = QLabel(tr("rpgmaker.no_alt_title"))
+        self.rpgm_no_alt_title.setStyleSheet("font-weight: 600;")
         self.rpgmaker_no_alt_status = QLabel("—")
         self.rpgmaker_no_alt_status.setObjectName("muted")
         self.rpgmaker_no_alt_status.setWordWrap(True)
         self.rpgmaker_no_alt_status.setStyleSheet("font-size: 8.6pt;")
-        alt_text.addWidget(alt_title)
+        alt_text.addWidget(self.rpgm_no_alt_title)
         alt_text.addWidget(self.rpgmaker_no_alt_status)
         alt_row.addLayout(alt_text, 1)
 
         self.rpgmaker_no_alt_toggle = ToggleSwitch()
-        self.rpgmaker_no_alt_toggle.setToolTip(
-            "Ativa ou remove AniShade_NoAltSkip.js para que Alt / Alt+Tab / Alt+Enter nunca pulem diálogos "
-            "(Ctrl continua funcionando normalmente)."
-        )
+        self.rpgmaker_no_alt_toggle.setToolTip(tr("rpgmaker.no_alt_tooltip"))
         self.rpgmaker_no_alt_toggle.toggled.connect(
             lambda checked: self._on_rpgmaker_plugin_toggled("no_alt_skip", checked)
         )
@@ -424,21 +442,18 @@ class MainWindow(QMainWindow):
         slots_row.setSpacing(12)
         slots_text = QVBoxLayout()
         slots_text.setSpacing(2)
-        slots_title = QLabel("Expandir para 100 slots de save")
-        slots_title.setStyleSheet("font-weight: 600;")
+        self.rpgm_slots_title = QLabel(tr("rpgmaker.save_slots_title"))
+        self.rpgm_slots_title.setStyleSheet("font-weight: 600;")
         self.rpgmaker_save_slots_status = QLabel("—")
         self.rpgmaker_save_slots_status.setObjectName("muted")
         self.rpgmaker_save_slots_status.setWordWrap(True)
         self.rpgmaker_save_slots_status.setStyleSheet("font-size: 8.6pt;")
-        slots_text.addWidget(slots_title)
+        slots_text.addWidget(self.rpgm_slots_title)
         slots_text.addWidget(self.rpgmaker_save_slots_status)
         slots_row.addLayout(slots_text, 1)
 
         self.rpgmaker_save_slots_toggle = ToggleSwitch()
-        self.rpgmaker_save_slots_toggle.setToolTip(
-            "Ativa ou remove AniShade_SaveSlots100.js para liberar 100 slots manuais de save "
-            "(mantém o Autosave no MZ e nunca reduz se o jogo já tiver mais de 100)."
-        )
+        self.rpgmaker_save_slots_toggle.setToolTip(tr("rpgmaker.save_slots_tooltip"))
         self.rpgmaker_save_slots_toggle.toggled.connect(
             lambda checked: self._on_rpgmaker_plugin_toggled("save_slots_100", checked)
         )
@@ -452,75 +467,75 @@ class MainWindow(QMainWindow):
         nwjs_row.setSpacing(10)
         nwjs_text = QVBoxLayout()
         nwjs_text.setSpacing(2)
-        nwjs_title = QLabel("Atualizar NW.js (oficial)")
-        nwjs_title.setStyleSheet("font-weight: 600;")
+        self.nwjs_title = QLabel(tr("rpgmaker.nwjs_title"))
+        self.nwjs_title.setStyleSheet("font-weight: 600;")
         self.nwjs_status_label = QLabel("—")
         self.nwjs_status_label.setObjectName("muted")
         self.nwjs_status_label.setWordWrap(True)
         self.nwjs_status_label.setStyleSheet("font-size: 8.6pt;")
-        nwjs_text.addWidget(nwjs_title)
+        nwjs_text.addWidget(self.nwjs_title)
         nwjs_text.addWidget(self.nwjs_status_label)
         nwjs_row.addLayout(nwjs_text, 1)
 
-        self.nwjs_restore_button = QPushButton("Restaurar")
+        self.nwjs_restore_button = QPushButton(tr("rpgmaker.nwjs_restore"))
         self.nwjs_restore_button.setObjectName("ghost")
-        self.nwjs_restore_button.setToolTip("Restaura o NW.js e o package.json originais do backup")
+        self.nwjs_restore_button.setToolTip(tr("rpgmaker.nwjs_restore_tooltip"))
         self.nwjs_restore_button.clicked.connect(self._start_restore_nwjs)
         self.nwjs_restore_button.hide()
         nwjs_row.addWidget(self.nwjs_restore_button, 0, Qt.AlignVCenter)
 
-        self.nwjs_update_button = QPushButton("Atualizar NW.js")
-        self.nwjs_update_button.setToolTip(
-            "Baixa o NW.js oficial de nwjs.io (uma única vez), atualiza o runtime do jogo "
-            "e corrige problemas de compatibilidade no package.json (name ausente, autoplay, js-flags, etc.)."
-        )
+        self.nwjs_update_button = QPushButton(tr("rpgmaker.nwjs_update"))
+        self.nwjs_update_button.setToolTip(tr("rpgmaker.nwjs_update_tooltip"))
         self.nwjs_update_button.clicked.connect(self._start_update_nwjs)
         nwjs_row.addWidget(self.nwjs_update_button, 0, Qt.AlignVCenter)
         card.add_layout(nwjs_row)
         return card
 
     def _build_renpy_card(self) -> Card:
-        card = Card("Ren'Py")
-        mod_link = QPushButton("0x52.dev")
-        mod_link.setObjectName("chip")
-        mod_link.setToolTip(f"Abrir página oficial: {renpy.MOD_PAGE_URL}")
-        mod_link.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(renpy.MOD_PAGE_URL)))
-        card.add_header_widget(mod_link)
+        card = Card(tr("renpy.title"))
+        self.renpy_mod_link = QPushButton("0x52.dev")
+        self.renpy_mod_link.setObjectName("chip")
+        self.renpy_mod_link.setToolTip(tr("renpy.mod_link_tooltip", url=renpy.MOD_PAGE_URL))
+        self.renpy_mod_link.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(renpy.MOD_PAGE_URL)))
+        card.add_header_widget(self.renpy_mod_link)
 
         urm_row = QHBoxLayout()
         urm_row.setSpacing(12)
         urm_text = QVBoxLayout()
         urm_text.setSpacing(2)
-        urm_title = QLabel("Universal Ren'Py Mod (URM)")
-        urm_title.setStyleSheet("font-weight: 600;")
+        self.renpy_urm_title = QLabel(tr("renpy.urm_title"))
+        self.renpy_urm_title.setStyleSheet("font-weight: 600;")
         self.renpy_urm_status = QLabel("—")
         self.renpy_urm_status.setObjectName("muted")
         self.renpy_urm_status.setWordWrap(True)
         self.renpy_urm_status.setStyleSheet("font-size: 8.6pt;")
-        urm_text.addWidget(urm_title)
+        urm_text.addWidget(self.renpy_urm_title)
         urm_text.addWidget(self.renpy_urm_status)
         urm_row.addLayout(urm_text, 1)
 
         self.renpy_urm_toggle = ToggleSwitch()
-        self.renpy_urm_toggle.setToolTip(
-            "Baixa o Universal Ren'Py Mod (0x52_URM.rpa) de 0x52.dev uma única vez, "
-            "salva em cache e instala ou remove na pasta game/ imediatamente."
-        )
+        self.renpy_urm_toggle.setToolTip(tr("renpy.urm_tooltip"))
         self.renpy_urm_toggle.toggled.connect(self._on_renpy_urm_toggled)
         urm_row.addWidget(self.renpy_urm_toggle, 0, Qt.AlignVCenter)
         card.add_layout(urm_row)
         return card
 
+    def _refresh_variant_list_labels(self) -> None:
+        for row in range(self.variant_list.count()):
+            item = self.variant_list.item(row)
+            key = item.data(ROLE_VARIANT_KEY)
+            variant = anime4k.variant(key)
+            item.setData(ROLE_TITLE, variant.label)
+            item.setData(ROLE_DESC, variant.description)
+        self.variant_list.viewport().update()
+
     def _build_shader_card(self) -> Card:
-        card = Card("Shaders Anime4K (Restore)")
-        intro = QLabel(
-            "Restore reconstrói detalhes da arte que o jogo já ampliou. Escolha a variante pela "
-            "resolução interna do jogo; quanto maior a rede, maior o custo de GPU."
-        )
-        intro.setObjectName("muted")
-        intro.setWordWrap(True)
-        intro.setStyleSheet("font-size: 8.7pt;")
-        card.add(intro)
+        card = Card(tr("shader.title"))
+        self.shader_intro = QLabel(tr("shader.intro"))
+        self.shader_intro.setObjectName("muted")
+        self.shader_intro.setWordWrap(True)
+        self.shader_intro.setStyleSheet("font-size: 8.7pt;")
+        card.add(self.shader_intro)
 
         self.variant_list = QListWidget()
         self.variant_list.setItemDelegate(VariantDelegate(self.variant_list))
@@ -545,59 +560,47 @@ class MainWindow(QMainWindow):
 
         margin_row = QHBoxLayout()
         margin_row.setSpacing(8)
-        margin_label = QLabel("Margem superior (barra de título)")
-        margin_label.setObjectName("muted")
+        self.margin_label = QLabel(tr("shader.top_margin"))
+        self.margin_label.setObjectName("muted")
         self.margin_spin = QSpinBox()
         self.margin_spin.setRange(0, 200)
         self.margin_spin.setSuffix(" px")
-        self.margin_spin.setToolTip(
-            "Pixels do topo que não devem ser filtrados. Alguns jogos NW.js/Chromium "
-            "incluem a barra de título no swapchain (ex.: buffer 1080x751 para conteúdo "
-            "1080x720). Use 0 em fullscreen/borderless."
-        )
+        self.margin_spin.setToolTip(tr("shader.top_margin_tooltip"))
         self.margin_spin.valueChanged.connect(self._on_margin_changed)
-        margin_row.addWidget(margin_label)
+        margin_row.addWidget(self.margin_label)
         margin_row.addWidget(self.margin_spin, 1)
         card.add_layout(margin_row)
 
-        margin_hint = QLabel(
-            "Deixe 0 em fullscreen. Em janela, se a barra de título ficar distorcida, "
-            "ajuste para a altura da barra (ex.: 31 px)."
-        )
-        margin_hint.setObjectName("muted")
-        margin_hint.setWordWrap(True)
-        margin_hint.setStyleSheet("font-size: 8.5pt;")
-        card.add(margin_hint)
+        self.margin_hint = QLabel(tr("shader.top_margin_hint"))
+        self.margin_hint.setObjectName("muted")
+        self.margin_hint.setWordWrap(True)
+        self.margin_hint.setStyleSheet("font-size: 8.5pt;")
+        card.add(self.margin_hint)
 
         aspect_row = QHBoxLayout()
         aspect_row.setSpacing(8)
-        aspect_label = QLabel("Proporção do conteúdo (L/A)")
-        aspect_label.setObjectName("muted")
+        self.aspect_label = QLabel(tr("shader.aspect"))
+        self.aspect_label.setObjectName("muted")
         self.aspect_spin = QDoubleSpinBox()
         self.aspect_spin.setRange(0.0, 4.0)
         self.aspect_spin.setDecimals(3)
         self.aspect_spin.setSingleStep(0.01)
-        self.aspect_spin.setToolTip(
-            "Opcional: limita manualmente o shader a uma proporção (ex.: 1.5). "
-            "Deixe 0 (recomendado): o shader já detecta e bloqueia feedback nas bordas automaticamente."
-        )
+        self.aspect_spin.setToolTip(tr("shader.aspect_tooltip"))
         self.aspect_spin.valueChanged.connect(self._on_aspect_changed)
-        aspect_row.addWidget(aspect_label)
+        aspect_row.addWidget(self.aspect_label)
         aspect_row.addWidget(self.aspect_spin, 1)
         card.add_layout(aspect_row)
 
-        aspect_hint = QLabel(
-            "Recomendado: 0 (tela inteira). A proteção contra ruído/feedback nas bordas pretas é automática no shader."
-        )
-        aspect_hint.setObjectName("muted")
-        aspect_hint.setWordWrap(True)
-        aspect_hint.setStyleSheet("font-size: 8.5pt;")
-        card.add(aspect_hint)
+        self.aspect_hint = QLabel(tr("shader.aspect_hint"))
+        self.aspect_hint.setObjectName("muted")
+        self.aspect_hint.setWordWrap(True)
+        self.aspect_hint.setStyleSheet("font-size: 8.5pt;")
+        card.add(self.aspect_hint)
         return card
 
     def _build_install_card(self) -> Card:
-        card = Card("Instalação")
-        self.install_refresh = QPushButton("Atualizar status")
+        card = Card(tr("install.title"))
+        self.install_refresh = QPushButton(tr("install.refresh"))
         self.install_refresh.setObjectName("chip")
         self.install_refresh.clicked.connect(self._refresh_install_card)
         card.add_header_widget(self.install_refresh)
@@ -607,38 +610,41 @@ class MainWindow(QMainWindow):
         grid.setVerticalSpacing(8)
         grid.setColumnStretch(1, 1)
 
+        self.install_reshade_label = self._label(tr("install.reshade"))
+        self.install_dll_label = self._label(tr("install.dll_proxy"))
+        self.install_preset_label = self._label(tr("install.preset"))
+        self.install_shaders_label = self._label(tr("install.shaders"))
+        self.install_launcher_label = self._label(tr("install.launcher"))
         self.reshade_value = QLabel("—")
         self.shaders_value = QLabel("—")
         self.launcher_value = QLabel("—")
         self.preset_value = ElidedLabel("—")
-        self.rpgmaker_plugin_label = self._label("Plugin RPG Maker")
+        self.rpgmaker_plugin_label = self._label(tr("install.rpgmaker_plugin"))
         self.rpgmaker_plugin_value = QLabel("—")
-        self.renpy_urm_label = self._label("Mod Ren'Py")
+        self.renpy_urm_label = self._label(tr("install.renpy_urm"))
         self.renpy_urm_value = QLabel("—")
 
         self.dll_combo = QComboBox()
-        self.dll_combo.setToolTip(
-            "Nome da DLL proxy. 'Automático' escolhe a melhor opção livre na pasta do jogo."
-        )
+        self.dll_combo.setToolTip(tr("install.dll_tooltip_auto"))
         self.dll_combo.currentIndexChanged.connect(self._on_dll_changed)
 
-        grid.addWidget(self._label("ReShade"), 0, 0)
+        grid.addWidget(self.install_reshade_label, 0, 0)
         grid.addWidget(self.reshade_value, 0, 1)
-        grid.addWidget(self._label("DLL proxy"), 1, 0)
+        grid.addWidget(self.install_dll_label, 1, 0)
         grid.addWidget(self.dll_combo, 1, 1)
-        grid.addWidget(self._label("Preset"), 2, 0)
+        grid.addWidget(self.install_preset_label, 2, 0)
         preset_row = QHBoxLayout()
         preset_row.setSpacing(6)
         preset_row.addWidget(self.preset_value, 1)
-        self.open_preset_button = QPushButton("Editar")
+        self.open_preset_button = QPushButton(tr("install.edit"))
         self.open_preset_button.setObjectName("chip")
-        self.open_preset_button.setToolTip("Abrir o preset no editor padrão (.ini)")
+        self.open_preset_button.setToolTip(tr("install.edit_tooltip"))
         self.open_preset_button.clicked.connect(self._open_preset)
         preset_row.addWidget(self.open_preset_button)
         grid.addLayout(preset_row, 2, 1)
-        grid.addWidget(self._label("Shaders"), 3, 0)
+        grid.addWidget(self.install_shaders_label, 3, 0)
         grid.addWidget(self.shaders_value, 3, 1)
-        grid.addWidget(self._label("Launcher"), 4, 0)
+        grid.addWidget(self.install_launcher_label, 4, 0)
         grid.addWidget(self.launcher_value, 4, 1)
         grid.addWidget(self.rpgmaker_plugin_label, 5, 0)
         grid.addWidget(self.rpgmaker_plugin_value, 5, 1)
@@ -658,17 +664,14 @@ class MainWindow(QMainWindow):
 
         row = QHBoxLayout()
         row.setSpacing(8)
-        self.create_launcher_check = QCheckBox("Criar launcher .bat com correções do engine")
-        self.create_launcher_check.setToolTip(
-            "O launcher aplica variáveis de ambiente recomendadas (ex.: RENPY_RENDERER) "
-            "antes de abrir o jogo."
-        )
+        self.create_launcher_check = QCheckBox(tr("install.create_launcher"))
+        self.create_launcher_check.setToolTip(tr("install.create_launcher_tooltip"))
         self.create_launcher_check.toggled.connect(self._on_launcher_toggled)
         row.addWidget(self.create_launcher_check, 1)
-        open_folder = QPushButton("Abrir pasta do jogo")
-        open_folder.setObjectName("ghost")
-        open_folder.clicked.connect(self._open_game_folder)
-        row.addWidget(open_folder)
+        self.open_game_folder_button = QPushButton(tr("install.open_game_folder"))
+        self.open_game_folder_button.setObjectName("ghost")
+        self.open_game_folder_button.clicked.connect(self._open_game_folder)
+        row.addWidget(self.open_game_folder_button)
         card.add_layout(row)
         return card
 
@@ -676,7 +679,7 @@ class MainWindow(QMainWindow):
         footer = QHBoxLayout()
         footer.setSpacing(10)
 
-        self.footer_status = ElidedLabel("Adicione um jogo para começar.")
+        self.footer_status = ElidedLabel(tr("footer.add_game_start"))
         self.footer_status.setObjectName("muted")
         footer.addWidget(self.footer_status, 1)
 
@@ -686,18 +689,103 @@ class MainWindow(QMainWindow):
         self.progress.hide()
         footer.addWidget(self.progress)
 
-        self.uninstall_button = QPushButton("Desinstalar")
+        self.uninstall_button = QPushButton(tr("footer.uninstall"))
         self.uninstall_button.setObjectName("danger")
         self.uninstall_button.clicked.connect(self._start_uninstall)
         self.uninstall_button.setEnabled(False)
         footer.addWidget(self.uninstall_button)
 
-        self.install_button = QPushButton("Instalar ReShade + Anime4K")
+        self.install_button = QPushButton(tr("footer.install"))
         self.install_button.setObjectName("primary")
         self.install_button.clicked.connect(self._start_install)
         self.install_button.setEnabled(False)
         footer.addWidget(self.install_button)
         return footer
+
+    def retranslate_ui(self) -> None:
+        """Apply the currently active language to all visible widgets immediately."""
+        self.setWindowTitle(tr("app.window_title"))
+        self.app_subtitle_label.setText(tr("app.tagline"))
+        self.add_button.setText(tr("topbar.add_game"))
+        self.settings_button.setText(tr("topbar.settings"))
+        self.log_button.setText(tr("topbar.log"))
+        self.version_label.setToolTip(tr("app.window_title"))
+
+        self.banner.label.setText(tr("banner.reshade_missing"))
+        self.banner.button.setText(tr("banner.download_now"))
+        self.log_box.setPlaceholderText(tr("log.placeholder"))
+
+        self.search.setPlaceholderText(tr("library.search_placeholder"))
+        self.empty_hint.setText(tr("library.empty_hint"))
+        self.library_hint.setText(tr("library.hint"))
+        self.select_placeholder.setText(tr("library.select_placeholder"))
+
+        self.play_button.setText(tr("header.play"))
+        self.play_button.setToolTip(tr("header.play_tooltip"))
+        self.folder_button.setText(tr("header.folder"))
+        self.remove_button.setText(tr("header.remove"))
+
+        self.detection_card.title_label.setText(tr("detection.title"))
+        self.reanalyze_button.setText(tr("detection.reanalyze"))
+        self.detect_engine_label.setText(tr("detection.engine"))
+        self.detect_api_label.setText(tr("detection.api"))
+        self.detect_arch_label.setText(tr("detection.arch"))
+        self.detect_reshade_label.setText(tr("detection.reshade"))
+        self._populate_engine_combo()
+        self._populate_api_combo()
+
+        self.rpgmaker_card.title_label.setText(tr("rpgmaker.title"))
+        self.rpgm_hide_title.setText(tr("rpgmaker.hide_textbox_title"))
+        self.rpgmaker_plugin_toggle.setToolTip(tr("rpgmaker.hide_textbox_tooltip"))
+        self.rpgm_no_alt_title.setText(tr("rpgmaker.no_alt_title"))
+        self.rpgmaker_no_alt_toggle.setToolTip(tr("rpgmaker.no_alt_tooltip"))
+        self.rpgm_slots_title.setText(tr("rpgmaker.save_slots_title"))
+        self.rpgmaker_save_slots_toggle.setToolTip(tr("rpgmaker.save_slots_tooltip"))
+        self.nwjs_title.setText(tr("rpgmaker.nwjs_title"))
+        self.nwjs_restore_button.setText(tr("rpgmaker.nwjs_restore"))
+        self.nwjs_restore_button.setToolTip(tr("rpgmaker.nwjs_restore_tooltip"))
+        self.nwjs_update_button.setText(tr("rpgmaker.nwjs_update"))
+        self.nwjs_update_button.setToolTip(tr("rpgmaker.nwjs_update_tooltip"))
+
+        self.renpy_card.title_label.setText(tr("renpy.title"))
+        self.renpy_mod_link.setToolTip(tr("renpy.mod_link_tooltip", url=renpy.MOD_PAGE_URL))
+        self.renpy_urm_title.setText(tr("renpy.urm_title"))
+        self.renpy_urm_toggle.setToolTip(tr("renpy.urm_tooltip"))
+
+        self.shader_card.title_label.setText(tr("shader.title"))
+        self.shader_intro.setText(tr("shader.intro"))
+        self._refresh_variant_list_labels()
+        self.margin_label.setText(tr("shader.top_margin"))
+        self.margin_spin.setToolTip(tr("shader.top_margin_tooltip"))
+        self.margin_hint.setText(tr("shader.top_margin_hint"))
+        self.aspect_label.setText(tr("shader.aspect"))
+        self.aspect_spin.setToolTip(tr("shader.aspect_tooltip"))
+        self.aspect_hint.setText(tr("shader.aspect_hint"))
+
+        self.install_card.title_label.setText(tr("install.title"))
+        self.install_refresh.setText(tr("install.refresh"))
+        self.install_reshade_label.setText(tr("install.reshade"))
+        self.install_dll_label.setText(tr("install.dll_proxy"))
+        self.install_preset_label.setText(tr("install.preset"))
+        self.open_preset_button.setText(tr("install.edit"))
+        self.open_preset_button.setToolTip(tr("install.edit_tooltip"))
+        self.install_shaders_label.setText(tr("install.shaders"))
+        self.install_launcher_label.setText(tr("install.launcher"))
+        self.rpgmaker_plugin_label.setText(tr("install.rpgmaker_plugin"))
+        self.renpy_urm_label.setText(tr("install.renpy_urm"))
+        self.create_launcher_check.setText(tr("install.create_launcher"))
+        self.create_launcher_check.setToolTip(tr("install.create_launcher_tooltip"))
+        self.open_game_folder_button.setText(tr("install.open_game_folder"))
+
+        self.uninstall_button.setText(tr("footer.uninstall"))
+
+        current_id = self.current_game.id if self.current_game is not None else None
+        self._refresh_games(select_id=current_id)
+        if self.current_game is not None:
+            self._load_game(self.current_game)
+        else:
+            self.install_button.setText(tr("footer.install"))
+            self._clear_selection()
 
     # ------------------------------------------------------------------
     # log / banner / shortcuts
@@ -746,10 +834,10 @@ class MainWindow(QMainWindow):
         def on_result(release) -> None:
             self._set_busy(False)
             self.banner.hide()
-            self._log(f"ReShade {release.version} pronto no cache.")
+            self._log(tr("log.reshade_cached", version=release.version))
             self._refresh_install_card()
 
-        self._set_busy(True, "Baixando ReShade...")
+        self._set_busy(True, tr("log.downloading_reshade"))
         self.banner.button.setEnabled(False)
         self.task = run_task(body, self._log, on_progress, on_result, self._on_task_error)
 
@@ -759,10 +847,10 @@ class MainWindow(QMainWindow):
     def _badge(self, game: Game) -> tuple[str, str]:
         manifest = installer.load_manifest(game.id)
         if not manifest:
-            return "Não instalado", "pending"
+            return tr("badge.not_installed"), "pending"
         dll_name = manifest.get("dll_name", "")
         if not dll_name or not (game.game_dir / dll_name).is_file():
-            return "Incompleto", "error"
+            return tr("badge.incomplete"), "error"
         if (
             manifest.get("variant") != game.variant
             or int(manifest.get("top_margin", 0)) != int(game.top_margin)
@@ -789,8 +877,8 @@ class MainWindow(QMainWindow):
                 and bool(manifest.get("renpy_urm")) != bool(game.renpy_urm)
             )
         ):
-            return "Pendente", "warn"
-        return "Instalado", "ok"
+            return tr("badge.pending"), "warn"
+        return tr("badge.installed"), "ok"
 
     def _refresh_games(self, select_id: str | None = None) -> None:
         self._refreshing = True
@@ -802,8 +890,10 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem()
             item.setData(ROLE_GAME_ID, game.id)
             item.setData(ROLE_TITLE, game.name)
-            api_label = detect.API_LABELS.get(game.api, game.api)
-            item.setData(ROLE_SUBTITLE, f"{game.engine_name} · {api_label} · {game.bits} bits")
+            engine_label = engines.engine_display_name(game.engine_key, fallback=game.engine_name)
+            api_label = detect.api_label(game.api)
+            bits_label = tr("common.bits", bits=game.bits)
+            item.setData(ROLE_SUBTITLE, f"{engine_label} · {api_label} · {bits_label}")
             status, kind = self._badge(game)
             item.setData(ROLE_STATUS, status)
             item.setData(ROLE_STATUS_KIND, kind)
@@ -841,7 +931,7 @@ class MainWindow(QMainWindow):
         self.uninstall_button.setEnabled(False)
         self.play_button.setEnabled(False)
         self.remove_button.setEnabled(False)
-        self.footer_status.setText("Adicione um jogo para começar.")
+        self.footer_status.setText(tr("footer.add_game_start"))
 
     def _on_game_selected(self, current: QListWidgetItem | None, previous) -> None:
         if self._refreshing or current is None:
@@ -862,7 +952,7 @@ class MainWindow(QMainWindow):
                     game.engine_override or None,
                 )
             except Exception as exc:  # noqa: BLE001
-                QMessageBox.critical(self, "Erro ao analisar", str(exc))
+                QMessageBox.critical(self, tr("dialog.analyze_error_title"), str(exc))
                 return
             self.analysis = analysis
             self.stack.setCurrentIndex(1)
@@ -878,28 +968,28 @@ class MainWindow(QMainWindow):
             api_index = self.api_combo.findData(game.api_override or "")
             self.api_combo.setCurrentIndex(max(0, api_index))
 
-            evidence = "; ".join(analysis.engine_evidence) or "heurística padrão"
+            evidence = "; ".join(analysis.engine_evidence) or tr("detection.default_heuristic")
             self.engine_evidence.setText(f"{analysis.engine.name} — {evidence}")
-            self.api_source.setText(f"{detect.API_LABELS.get(analysis.api, analysis.api)} — {analysis.api_source}")
+            self.api_source.setText(f"{detect.api_label(analysis.api)} — {analysis.api_source}")
 
             bits = analysis.bits or 0
             module = "ReShade64.dll" if bits == 64 else "ReShade32.dll" if bits == 32 else "?"
-            self.arch_label.setText(f"{bits} bits" if bits else "desconhecida")
-            self.arch_label.setToolTip(f"Módulo usado: {module}")
+            self.arch_label.setText(tr("common.bits", bits=bits) if bits else tr("common.unknown_lower"))
+            self.arch_label.setToolTip(tr("detection.module_tooltip", module=module))
             self._refresh_dll_combo(analysis)
 
             if analysis.existing_reshade:
-                state = analysis.existing_reshade_version or "instalado"
+                state = analysis.existing_reshade_version or tr("detection.installed_lower")
                 self.reshade_state.setText(f"{state} ({analysis.existing_reshade_dll})")
                 self.reshade_state.setStyleSheet(f"color: {SUCCESS};")
             else:
-                self.reshade_state.setText("não instalado")
+                self.reshade_state.setText(tr("detection.not_installed_lower"))
                 self.reshade_state.setStyleSheet(f"color: {MUTED};")
 
             all_warnings = list(analysis.warnings)
             if analysis.conflicting_dlls:
                 all_warnings.append(
-                    "Conflito de nome: " + ", ".join(analysis.conflicting_dlls) + " (será evitado)."
+                    tr("detection.conflict_warning", dlls=", ".join(analysis.conflicting_dlls))
                 )
             if all_warnings:
                 self.warning_label.setText("\n".join(f"• {item}" for item in all_warnings))
@@ -959,12 +1049,12 @@ class MainWindow(QMainWindow):
     def _refresh_dll_combo(self, analysis: detect.GameAnalysis) -> None:
         self.dll_combo.blockSignals(True)
         self.dll_combo.clear()
-        auto = "automático"
+        auto = tr("install.dll_auto_label")
         try:
             auto = installer.resolve_dll_name(analysis.game_dir, analysis, "")
         except installer.InstallError:
-            auto = "conflito de nomes"
-        self.dll_combo.addItem(f"Automático ({auto})", "")
+            auto = tr("install.dll_conflict")
+        self.dll_combo.addItem(tr("install.dll_auto", name=auto), "")
         for name in detect.DLL_CHOICES.get(analysis.api, ()):
             self.dll_combo.addItem(name, name)
         override = self.current_game.dll_override if self.current_game else ""
@@ -1060,7 +1150,7 @@ class MainWindow(QMainWindow):
                 self.progress.setRange(0, 100)
                 self.progress.setValue(int(done * 100 / total))
                 self.footer_status.setText(
-                    f"Baixando Universal Ren'Py Mod... {done / 1048576:.1f} / {total / 1048576:.1f} MB"
+                    tr("log.downloading_urm", done=done / 1048576, total=total / 1048576)
                 )
             else:
                 self.progress.setRange(0, 0)
@@ -1078,7 +1168,7 @@ class MainWindow(QMainWindow):
             self.renpy_urm_toggle.blockSignals(False)
             self._on_task_error(message, trace, error)
 
-        verb = "Instalando Universal Ren'Py Mod..." if checked else "Removendo Universal Ren'Py Mod..."
+        verb = tr("log.installing_urm") if checked else tr("log.removing_urm")
         self._set_busy(True, verb)
         self.task = run_task(body, self._log, on_progress, on_result, on_error)
 
@@ -1149,20 +1239,19 @@ class MainWindow(QMainWindow):
         self.rpgmaker_plugin_toggle.blockSignals(False)
 
         if not has_plugins:
-            self.rpgmaker_plugin_status.setText(
-                "plugins.js não encontrado (jogo compactado ou estrutura NW.js não padrão)."
-            )
+            self.rpgmaker_plugin_status.setText(tr("rpgmaker.plugins_js_missing"))
         elif hide_active:
             self.rpgmaker_plugin_status.setText(
-                f"Ativo ({rpgmaker.PLUGIN_FILE} registrado em {analysis.rpgmaker_plugins_js}). "
-                "Pressione H no jogo para ocultar/exibir a caixa de texto."
+                tr(
+                    "rpgmaker.hide_textbox_active",
+                    file=rpgmaker.PLUGIN_FILE,
+                    plugins_js=analysis.rpgmaker_plugins_js,
+                )
             )
         elif game.rpgmaker_hide_textbox:
-            self.rpgmaker_plugin_status.setText(
-                "Não instalado ainda — ative o interruptor agora ou ele será instalado junto com o ReShade."
-            )
+            self.rpgmaker_plugin_status.setText(tr("rpgmaker.not_installed_yet"))
         else:
-            self.rpgmaker_plugin_status.setText("Desativado — ative o interruptor para adicionar ao jogo.")
+            self.rpgmaker_plugin_status.setText(tr("rpgmaker.hide_textbox_disabled"))
 
         no_alt_active = installer.is_rpgmaker_plugin_active(game.game_dir, "no_alt_skip") if has_plugins else False
         self.rpgmaker_no_alt_toggle.blockSignals(True)
@@ -1171,21 +1260,15 @@ class MainWindow(QMainWindow):
         self.rpgmaker_no_alt_toggle.blockSignals(False)
 
         if not has_plugins:
-            self.rpgmaker_no_alt_status.setText(
-                "plugins.js não encontrado (jogo compactado ou estrutura NW.js não padrão)."
-            )
+            self.rpgmaker_no_alt_status.setText(tr("rpgmaker.plugins_js_missing"))
         elif no_alt_active:
             self.rpgmaker_no_alt_status.setText(
-                f"Ativo ({rpgmaker.NO_ALT_SKIP_FILE}). Alt e Alt+Tab não pulam diálogos; Ctrl continua funcionando."
+                tr("rpgmaker.no_alt_active", file=rpgmaker.NO_ALT_SKIP_FILE)
             )
         elif game.rpgmaker_no_alt_skip:
-            self.rpgmaker_no_alt_status.setText(
-                "Não instalado ainda — ative o interruptor agora ou ele será instalado junto com o ReShade."
-            )
+            self.rpgmaker_no_alt_status.setText(tr("rpgmaker.not_installed_yet"))
         else:
-            self.rpgmaker_no_alt_status.setText(
-                "Desativado — ative o interruptor para impedir que Alt / Alt+Tab pule texto."
-            )
+            self.rpgmaker_no_alt_status.setText(tr("rpgmaker.no_alt_disabled"))
 
         save_slots_active = (
             installer.is_rpgmaker_plugin_active(game.game_dir, "save_slots_100") if has_plugins else False
@@ -1196,35 +1279,34 @@ class MainWindow(QMainWindow):
         self.rpgmaker_save_slots_toggle.blockSignals(False)
 
         if not has_plugins:
-            self.rpgmaker_save_slots_status.setText(
-                "plugins.js não encontrado (jogo compactado ou estrutura NW.js não padrão)."
-            )
+            self.rpgmaker_save_slots_status.setText(tr("rpgmaker.plugins_js_missing"))
         elif save_slots_active:
             self.rpgmaker_save_slots_status.setText(
-                f"Ativo ({rpgmaker.SAVE_SLOTS_100_FILE}). 100 slots manuais de save liberados (MV e MZ)."
+                tr("rpgmaker.save_slots_active", file=rpgmaker.SAVE_SLOTS_100_FILE)
             )
         elif game.rpgmaker_save_slots_100:
-            self.rpgmaker_save_slots_status.setText(
-                "Não instalado ainda — ative o interruptor agora ou ele será instalado junto com o ReShade."
-            )
+            self.rpgmaker_save_slots_status.setText(tr("rpgmaker.not_installed_yet"))
         else:
-            self.rpgmaker_save_slots_status.setText(
-                "Desativado — ative o interruptor para expandir o limite para 100 slots de save."
-            )
+            self.rpgmaker_save_slots_status.setText(tr("rpgmaker.save_slots_disabled"))
 
         record = nwjs.load_update_record(game.id)
-        current_ver = record.get("version") or analysis.nwjs_version or "desconhecida"
-        bits_text = f"{analysis.bits} bits" if analysis.bits else "? bits"
+        current_ver = record.get("version") or analysis.nwjs_version or tr("common.unknown_lower")
+        bits_text = tr("common.bits", bits=analysis.bits) if analysis.bits else tr("common.bits_unknown")
         cached = nwjs.newest_cached(nwjs.DEFAULT_ARCH)
         cache_hint = (
-            f"Cache local: NW.js {cached.version} ({cached.bits} bits)"
+            tr("rpgmaker.nwjs_cache_hint_cached", version=cached.version, bits=cached.bits)
             if cached
-            else "Baixa o NW.js oficial de nwjs.io 1x e reutiliza em todos os jogos"
+            else tr("rpgmaker.nwjs_cache_hint_empty")
         )
-        updated_tag = " · atualizado pelo AniShade" if record else ""
+        updated_tag = tr("rpgmaker.nwjs_updated_tag") if record else ""
         self.nwjs_status_label.setText(
-            f"No jogo: {current_ver} ({bits_text}{updated_tag})\n"
-            f"{cache_hint} · corrige package.json (name ausente, autoplay, js-flags, compatibilidade MV)."
+            tr(
+                "rpgmaker.nwjs_status",
+                version=current_ver,
+                bits_text=bits_text,
+                updated_tag=updated_tag,
+                cache_hint=cache_hint,
+            )
         )
         self.nwjs_restore_button.setVisible(nwjs.has_backup(game.id))
         self.nwjs_update_button.setEnabled(game.exe_path.is_file() and self.task is None)
@@ -1247,30 +1329,37 @@ class MainWindow(QMainWindow):
 
         cached = renpy.newest_cached()
         if not has_game_dir:
-            self.renpy_urm_status.setText(
-                "Pasta game/ não encontrada ao lado do executável."
-            )
+            self.renpy_urm_status.setText(tr("renpy.game_dir_missing"))
         elif urm_active:
             meta = installer.load_renpy_meta(game.id)
             version = str(meta.get("version") or "")
             ver_tag = f"v{version} · " if version else ""
             self.renpy_urm_status.setText(
-                f"Ativo ({ver_tag}{analysis.renpy_game_dir}/{renpy.URM_FILENAME}). "
-                "Menu de variáveis, cenas, escolhas, saves e customização dentro do jogo."
+                tr(
+                    "renpy.urm_active",
+                    ver_tag=ver_tag,
+                    game_dir=analysis.renpy_game_dir,
+                    filename=renpy.URM_FILENAME,
+                )
             )
         elif game.renpy_urm:
-            self.renpy_urm_status.setText(
-                "Não instalado ainda — ative o interruptor agora ou ele será instalado junto com o ReShade."
-            )
+            self.renpy_urm_status.setText(tr("renpy.urm_not_installed_yet"))
         elif cached:
             self.renpy_urm_status.setText(
-                f"Desativado — ative para instalar {renpy.URM_FILENAME} em {analysis.renpy_game_dir}/ "
-                f"(cache local: v{cached.version})."
+                tr(
+                    "renpy.urm_disabled_cached",
+                    filename=renpy.URM_FILENAME,
+                    game_dir=analysis.renpy_game_dir,
+                    version=cached.version,
+                )
             )
         else:
             self.renpy_urm_status.setText(
-                f"Desativado — baixa {renpy.URM_FILENAME} de 0x52.dev uma única vez, salva em cache "
-                f"e instala em {analysis.renpy_game_dir}/."
+                tr(
+                    "renpy.urm_disabled_uncached",
+                    filename=renpy.URM_FILENAME,
+                    game_dir=analysis.renpy_game_dir,
+                )
             )
 
     # ------------------------------------------------------------------
@@ -1285,11 +1374,17 @@ class MainWindow(QMainWindow):
         if manifest:
             version = manifest.get("reshade_version", "?")
             bits = manifest.get("bits", game.bits)
-            self.reshade_value.setText(f"{version} ({bits} bits)")
-            self.dll_combo.setToolTip(f"Instalado como {manifest.get('dll_name', '—')}")
+            self.reshade_value.setText(f"{version} ({tr('common.bits', bits=bits)})")
+            self.dll_combo.setToolTip(
+                tr("install.dll_tooltip_installed", dll_name=manifest.get("dll_name", "—"))
+            )
             self.preset_value.setText(str(game.preset_path))
             self.shaders_value.setText(
-                f"{len(manifest.get('techniques', []))} técnicas em {anime4k.SHADER_SUBDIR.as_posix()}"
+                tr(
+                    "install.techniques_installed",
+                    count=len(manifest.get("techniques", [])),
+                    subdir=anime4k.SHADER_SUBDIR.as_posix(),
+                )
             )
             self.launcher_value.setText(manifest.get("launcher") or "—")
             self.open_preset_button.setEnabled(True)
@@ -1299,13 +1394,11 @@ class MainWindow(QMainWindow):
             else:
                 self.problems_label.hide()
         else:
-            self.reshade_value.setText("não instalado")
-            self.dll_combo.setToolTip(
-                "Nome da DLL proxy. 'Automático' escolhe a melhor opção livre na pasta do jogo."
-            )
+            self.reshade_value.setText(tr("detection.not_installed_lower"))
+            self.dll_combo.setToolTip(tr("install.dll_tooltip_auto"))
             self.preset_value.setText(str(game.preset_path))
             self.shaders_value.setText(
-                f"{len(game.techniques())} técnicas planejadas"
+                tr("install.techniques_planned", count=len(game.techniques()))
             )
             self.launcher_value.setText("—")
             self.open_preset_button.setEnabled(game.preset_path.is_file())
@@ -1314,20 +1407,20 @@ class MainWindow(QMainWindow):
         if self.analysis and rpgmaker.is_supported_engine(self.analysis.engine.key):
             active_labels: list[str] = []
             if installer.is_rpgmaker_plugin_active(game.game_dir, "hide_textbox"):
-                active_labels.append("Ocultar texto (H)")
+                active_labels.append(tr("install.rpgm_hide_short"))
             if installer.is_rpgmaker_plugin_active(game.game_dir, "no_alt_skip"):
-                active_labels.append("Sem pular com Alt")
+                active_labels.append(tr("install.rpgm_no_alt_short"))
             if installer.is_rpgmaker_plugin_active(game.game_dir, "save_slots_100"):
-                active_labels.append("100 slots de save")
+                active_labels.append(tr("install.rpgm_slots_short"))
             if active_labels:
                 self.rpgmaker_plugin_value.setText(" · ".join(active_labels))
             elif self.analysis.rpgmaker_plugins_js:
                 if game.rpgmaker_hide_textbox or game.rpgmaker_no_alt_skip or game.rpgmaker_save_slots_100:
-                    self.rpgmaker_plugin_value.setText("serão instalados com o ReShade")
+                    self.rpgmaker_plugin_value.setText(tr("install.will_install_plural"))
                 else:
-                    self.rpgmaker_plugin_value.setText("desativados")
+                    self.rpgmaker_plugin_value.setText(tr("install.disabled_plural"))
             else:
-                self.rpgmaker_plugin_value.setText("plugins.js não encontrado")
+                self.rpgmaker_plugin_value.setText(tr("install.plugins_js_not_found"))
 
         if self.analysis and renpy.is_supported_engine(self.analysis.engine.key):
             if installer.is_renpy_urm_active(game.game_dir):
@@ -1337,11 +1430,11 @@ class MainWindow(QMainWindow):
                 self.renpy_urm_value.setText(f"Universal Ren'Py Mod{suffix} ({renpy.URM_FILENAME})")
             elif self.analysis.renpy_game_dir:
                 if game.renpy_urm:
-                    self.renpy_urm_value.setText("será instalado com o ReShade")
+                    self.renpy_urm_value.setText(tr("install.will_install_single"))
                 else:
-                    self.renpy_urm_value.setText("desativado")
+                    self.renpy_urm_value.setText(tr("install.disabled_single"))
             else:
-                self.renpy_urm_value.setText("pasta game/ não encontrada")
+                self.renpy_urm_value.setText(tr("install.game_dir_not_found"))
 
     def _update_footer(self) -> None:
         game = self.current_game
@@ -1388,31 +1481,26 @@ class MainWindow(QMainWindow):
             )
 
         if analysis.api == "vulkan":
-            self.install_button.setText("Vulkan não suportado")
+            self.install_button.setText(tr("footer.vulkan_unsupported"))
             self.install_button.setEnabled(False)
-            self.footer_status.setText(
-                "Este jogo usa Vulkan: o ReShade não carrega por proxy DLL. "
-                "Inicie em Direct3D 11/OpenGL ou use a injeção global."
-            )
+            self.footer_status.setText(tr("footer.vulkan_status"))
         elif not installed:
-            self.install_button.setText("Instalar ReShade + Anime4K")
+            self.install_button.setText(tr("footer.install"))
             self.install_button.setEnabled(True)
-            self.footer_status.setText("Pronto para instalar. O ReShade é baixado apenas uma vez.")
+            self.footer_status.setText(tr("footer.ready_to_install"))
         elif differs:
-            self.install_button.setText("Aplicar alterações")
+            self.install_button.setText(tr("footer.apply_changes"))
             self.install_button.setEnabled(True)
-            self.footer_status.setText("Alterações de shader pendentes (não instaladas ainda).")
+            self.footer_status.setText(tr("footer.changes_pending"))
         else:
-            self.install_button.setText("Reinstalar")
+            self.install_button.setText(tr("footer.reinstall"))
             self.install_button.setEnabled(True)
-            self.footer_status.setText(
-                "Instalado. Abra o jogo e pressione Home para abrir o overlay do ReShade."
-            )
+            self.footer_status.setText(tr("footer.installed_status"))
 
         self.uninstall_button.setEnabled(installed)
         self.play_button.setEnabled(game.exe_path.is_file())
         if not game.exe_path.is_file():
-            self.footer_status.setText("Executável não encontrado — o jogo foi movido ou removido?")
+            self.footer_status.setText(tr("footer.exe_missing"))
             self.install_button.setEnabled(False)
 
     def _set_busy(self, busy: bool, message: str = "") -> None:
@@ -1469,8 +1557,12 @@ class MainWindow(QMainWindow):
         def on_result(report: installer.InstallReport) -> None:
             self._set_busy(False)
             self._log(
-                f"Instalado: {report.dll_name} + {len(report.techniques)} passes "
-                f"(ReShade {report.reshade_version})."
+                tr(
+                    "log.installed",
+                    dll=report.dll_name,
+                    count=len(report.techniques),
+                    version=report.reshade_version,
+                )
             )
             self._refresh_games(select_id=game.id)
             self._refresh_rpgmaker_card()
@@ -1479,7 +1571,7 @@ class MainWindow(QMainWindow):
             self._update_footer()
             self._show_success(report)
 
-        self._set_busy(True, "Instalando...")
+        self._set_busy(True, tr("log.installing"))
         self.task = run_task(body, self._log, on_progress, on_result, self._on_task_error)
 
     def _show_success(self, report: installer.InstallReport) -> None:
@@ -1487,32 +1579,34 @@ class MainWindow(QMainWindow):
         for path_str in report.rpgmaker_plugins:
             fname = Path(path_str).name
             if fname == rpgmaker.PLUGIN_FILE:
-                plugin_lines.append(f"• Plugin RPG Maker: {fname} (tecla H oculta a caixa de texto)\n")
+                plugin_lines.append(tr("dialog.install_success_plugin_hide", file=fname))
             elif fname == rpgmaker.NO_ALT_SKIP_FILE:
-                plugin_lines.append(f"• Plugin RPG Maker: {fname} (Alt / Alt+Tab não pula texto)\n")
+                plugin_lines.append(tr("dialog.install_success_plugin_no_alt", file=fname))
             elif fname == rpgmaker.SAVE_SLOTS_100_FILE:
-                plugin_lines.append(f"• Plugin RPG Maker: {fname} (100 slots de save)\n")
+                plugin_lines.append(tr("dialog.install_success_plugin_slots", file=fname))
             else:
-                plugin_lines.append(f"• Plugin RPG Maker: {fname}\n")
+                plugin_lines.append(tr("dialog.install_success_plugin_other", file=fname))
         if report.renpy_urm:
             ver_suffix = f" v{report.renpy_urm_version}" if report.renpy_urm_version else ""
             plugin_lines.append(
-                f"• Mod Ren'Py: Universal Ren'Py Mod{ver_suffix} ({Path(report.renpy_urm).name})\n"
+                tr("dialog.install_success_renpy_urm", ver=ver_suffix, file=Path(report.renpy_urm).name)
             )
         plugin_line = "".join(plugin_lines)
-        extra = ""
-        if report.launcher:
-            extra = f"\n\nLauncher criado: {report.launcher}"
+        extra = tr("dialog.install_success_launcher", launcher=report.launcher) if report.launcher else ""
         QMessageBox.information(
             self,
-            "AniShade",
-            "Pronto!\n\n"
-            f"• DLL: {report.dll_name}\n"
-            f"• Preset: {anime4k.PRESET_NAME}\n"
-            f"• Cadeia: {', '.join(report.techniques)}\n"
-            f"{plugin_line}\n"
-            "Abra o jogo e pressione Home para abrir o overlay do ReShade."
-            f"{extra}",
+            tr("dialog.install_success_title"),
+            tr("dialog.install_success_header")
+            + "\n\n"
+            + tr("dialog.install_success_dll", dll=report.dll_name)
+            + "\n"
+            + tr("dialog.install_success_preset", preset=anime4k.PRESET_NAME)
+            + "\n"
+            + tr("dialog.install_success_chain", chain=", ".join(report.techniques))
+            + "\n"
+            + f"{plugin_line}\n"
+            + tr("dialog.install_success_footer")
+            + extra,
         )
 
     def _start_uninstall(self) -> None:
@@ -1521,9 +1615,8 @@ class MainWindow(QMainWindow):
             return
         confirm = QMessageBox.question(
             self,
-            "Desinstalar",
-            f"Remover o ReShade e os shaders Anime4K de “{game.name}”?\n\n"
-            "Somente arquivos criados pelo AniShade são removidos.",
+            tr("dialog.uninstall_title"),
+            tr("dialog.uninstall_body", name=game.name),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -1535,14 +1628,14 @@ class MainWindow(QMainWindow):
 
         def on_result(removed) -> None:
             self._set_busy(False)
-            self._log(f"ReShade removido ({len(removed)} arquivos).")
+            self._log(tr("log.uninstalled", count=len(removed)))
             self._refresh_games(select_id=game.id)
             self._refresh_rpgmaker_card()
             self._refresh_renpy_card()
             self._refresh_install_card()
             self._update_footer()
 
-        self._set_busy(True, "Desinstalando...")
+        self._set_busy(True, tr("log.uninstalling"))
         self.task = run_task(body, self._log, lambda *_: None, on_result, self._on_task_error)
 
     def _start_update_nwjs(self) -> None:
@@ -1551,19 +1644,14 @@ class MainWindow(QMainWindow):
             return
         cached = nwjs.newest_cached(nwjs.DEFAULT_ARCH)
         source_note = (
-            f"Usará o NW.js {cached.version} (64 bits) do cache local."
+            tr("dialog.nwjs_source_cached", version=cached.version)
             if cached
-            else "O NW.js oficial (64 bits) será baixado de nwjs.io uma única vez e salvo em cache para os próximos jogos."
+            else tr("dialog.nwjs_source_download")
         )
         confirm = QMessageBox.question(
             self,
-            "Atualizar NW.js",
-            f"Atualizar o runtime NW.js de “{game.name}”?\n\n"
-            f"{source_note}\n"
-            "Os arquivos originais do NW.js e o package.json serão salvos em backup "
-            "(você pode restaurar depois).\n"
-            "Correções automáticas aplicadas: campo 'name' ausente no package.json, "
-            "autoplay de áudio, flags V8 obsoletas e compatibilidade process.mainModule.",
+            tr("dialog.nwjs_update_title"),
+            tr("dialog.nwjs_update_body", name=game.name, source_note=source_note),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes,
         )
@@ -1587,41 +1675,41 @@ class MainWindow(QMainWindow):
                 self.progress.setRange(0, 100)
                 self.progress.setValue(int(done * 100 / total))
                 self.footer_status.setText(
-                    f"Baixando NW.js... {done / 1048576:.1f} / {total / 1048576:.1f} MB"
+                    tr("log.downloading_nwjs", done=done / 1048576, total=total / 1048576)
                 )
             else:
                 self.progress.setRange(0, 0)
 
         def on_result(report: nwjs.NwjsUpdateReport) -> None:
             self._set_busy(False)
-            self._log(f"NW.js atualizado para {report.version} ({report.arch}).")
+            self._log(tr("log.nwjs_updated", version=report.version, arch=report.arch))
             self._load_game(game)
             self._refresh_games(select_id=game.id)
             self._show_nwjs_success(report)
 
-        self._set_busy(True, "Atualizando NW.js...")
+        self._set_busy(True, tr("log.updating_nwjs"))
         self.task = run_task(body, self._log, on_progress, on_result, self._on_task_error)
 
     def _show_nwjs_success(self, report: nwjs.NwjsUpdateReport) -> None:
         lines = [
-            "NW.js atualizado com sucesso!",
+            tr("dialog.nwjs_success_header"),
             "",
-            f"• Versão: NW.js {report.version} ({report.arch})",
-            f"• Arquivos atualizados: {report.files_updated}",
+            tr("dialog.nwjs_success_version", version=report.version, arch=report.arch),
+            tr("dialog.nwjs_success_files", count=report.files_updated),
         ]
         if report.reshade_realigned:
-            lines.append("• DLL do ReShade atualizada automaticamente para 64 bits.")
+            lines.append(tr("dialog.nwjs_success_realigned"))
         if report.fixes_applied:
             lines.append("")
-            lines.append("Correções aplicadas:")
+            lines.append(tr("dialog.nwjs_success_fixes"))
             for fix in report.fixes_applied:
                 lines.append(f"  - {fix}")
         if report.warnings:
             lines.append("")
-            lines.append("Avisos:")
+            lines.append(tr("dialog.nwjs_success_warnings"))
             for warning in report.warnings:
                 lines.append(f"  ! {warning}")
-        QMessageBox.information(self, "NW.js atualizado", "\n".join(lines))
+        QMessageBox.information(self, tr("dialog.nwjs_success_title"), "\n".join(lines))
 
     def _start_restore_nwjs(self) -> None:
         game = self.current_game
@@ -1629,8 +1717,8 @@ class MainWindow(QMainWindow):
             return
         confirm = QMessageBox.question(
             self,
-            "Restaurar NW.js original",
-            f"Restaurar os arquivos originais do NW.js e o package.json de “{game.name}”?",
+            tr("dialog.nwjs_restore_title"),
+            tr("dialog.nwjs_restore_body", name=game.name),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -1642,29 +1730,30 @@ class MainWindow(QMainWindow):
 
         def on_result(restored) -> None:
             self._set_busy(False)
-            self._log(f"NW.js original restaurado ({len(restored)} arquivos).")
+            self._log(tr("log.nwjs_restored", count=len(restored)))
             self._load_game(game)
             self._refresh_games(select_id=game.id)
 
-        self._set_busy(True, "Restaurando NW.js...")
+        self._set_busy(True, tr("log.restoring_nwjs"))
         self.task = run_task(body, self._log, lambda *_: None, on_result, self._on_task_error)
 
     def _on_task_error(self, message: str, trace: str, error: object | None = None) -> None:
         self.task = None
         self._set_busy(False)
-        self._log(f"Erro: {message}")
+        self._log(tr("log.error", message=message))
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Critical)
-        box.setWindowTitle("Falha na operação")
+        box.setWindowTitle(tr("dialog.task_error_title"))
         box.setText(message)
         if trace:
             box.setDetailedText(trace)
         box.exec()
-        if isinstance(error, installer.AdminRequired) or "administrador" in message.lower():
+        lower = message.lower()
+        if isinstance(error, installer.AdminRequired) or "administrator" in lower or "administrador" in lower:
             answer = QMessageBox.question(
                 self,
-                "Permissão necessária",
-                "Reiniciar o AniShade como administrador para continuar?",
+                tr("dialog.admin_title"),
+                tr("dialog.admin_body"),
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.Yes,
             )
@@ -1679,9 +1768,9 @@ class MainWindow(QMainWindow):
         start = self.store.settings.last_dir or str(Path.home())
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Escolha o executável do jogo",
+            tr("dialog.pick_game_title"),
             start,
-            "Executáveis (*.exe);;Todos os arquivos (*.*)",
+            tr("dialog.pick_game_filter"),
         )
         if path:
             self._add_game(path)
@@ -1689,18 +1778,22 @@ class MainWindow(QMainWindow):
     def _add_game(self, path: str) -> None:
         exe = Path(path).resolve()
         if exe.suffix.lower() != ".exe" or not exe.is_file():
-            QMessageBox.warning(self, "Arquivo inválido", "Selecione um arquivo .exe válido.")
+            QMessageBox.warning(self, tr("dialog.invalid_file_title"), tr("dialog.invalid_file_body"))
             return
         existing = self.store.find_by_exe(exe)
         if existing:
             self._refresh_games(select_id=existing.id)
-            self._log(f"“{existing.name}” já está na biblioteca.")
+            self._log(tr("log.already_in_library", name=existing.name))
             return
 
         try:
             analysis = detect.analyze(exe)
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "Erro", f"Não foi possível analisar o executável:\n{exc}")
+            QMessageBox.critical(
+                self,
+                tr("common.error"),
+                tr("dialog.analyze_failed_body", error=exc),
+            )
             return
 
         game = Game(
@@ -1729,13 +1822,18 @@ class MainWindow(QMainWindow):
         self.store.settings.last_dir = str(exe.parent)
         self.store.save_settings()
         self._refresh_games(select_id=game.id)
-        self._log(f"Adicionado: {game.name} ({analysis.engine.name}).")
+        self._log(tr("log.game_added", name=game.name, engine=analysis.engine.name))
 
     def _rename_game(self) -> None:
         game = self.current_game
         if game is None:
             return
-        name, ok = QInputDialog.getText(self, "Renomear", "Nome exibido:", text=game.name)
+        name, ok = QInputDialog.getText(
+            self,
+            tr("dialog.rename_title"),
+            tr("dialog.rename_label"),
+            text=game.name,
+        )
         if ok and name.strip():
             game.name = name.strip()
             self.store.add_or_update(game)
@@ -1749,11 +1847,11 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QMenu
 
         menu = QMenu(self)
-        play = menu.addAction("Jogar")
-        rename = menu.addAction("Renomear")
-        folder = menu.addAction("Abrir pasta")
+        play = menu.addAction(tr("menu.play"))
+        rename = menu.addAction(tr("menu.rename"))
+        folder = menu.addAction(tr("menu.open_folder"))
         menu.addSeparator()
-        remove = menu.addAction("Remover da biblioteca")
+        remove = menu.addAction(tr("menu.remove_from_library"))
         chosen = menu.exec(self.game_list.mapToGlobal(position))
         if chosen == play:
             self._launch_game()
@@ -1770,15 +1868,17 @@ class MainWindow(QMainWindow):
             return
         installed = bool(installer.load_manifest(game.id))
         box = QMessageBox(self)
-        box.setWindowTitle("Remover jogo")
-        box.setText(f"Remover “{game.name}” da biblioteca?")
+        box.setWindowTitle(tr("dialog.remove_title"))
+        box.setText(tr("dialog.remove_body", name=game.name))
         if installed:
-            box.setInformativeText(
-                "O jogo tem o ReShade instalado pelo AniShade. Você pode desinstalar antes de remover."
-            )
-        remove_only = box.addButton("Só remover da lista", QMessageBox.AcceptRole)
-        uninstall_button = box.addButton("Desinstalar e remover", QMessageBox.DestructiveRole) if installed else None
-        cancel = box.addButton("Cancelar", QMessageBox.RejectRole)
+            box.setInformativeText(tr("dialog.remove_installed_info"))
+        remove_only = box.addButton(tr("dialog.remove_only"), QMessageBox.AcceptRole)
+        uninstall_button = (
+            box.addButton(tr("dialog.remove_and_uninstall"), QMessageBox.DestructiveRole)
+            if installed
+            else None
+        )
+        cancel = box.addButton(tr("common.cancel"), QMessageBox.RejectRole)
         box.setDefaultButton(cancel)
         box.exec()
         clicked = box.clickedButton()
@@ -1793,16 +1893,16 @@ class MainWindow(QMainWindow):
             def on_result(_):
                 self.current_game = None
                 self._set_busy(False)
-                self._log(f"“{game.name}” desinstalado e removido.")
+                self._log(tr("log.game_uninstalled_removed", name=game.name))
                 self._refresh_games()
 
-            self._set_busy(True, "Desinstalando...")
+            self._set_busy(True, tr("log.uninstalling"))
             self.task = run_task(body, self._log, lambda *_: None, on_result, self._on_task_error)
         elif clicked == remove_only:
             self.store.remove(game.id)
             self.current_game = None
             self._refresh_games()
-            self._log("Jogo removido da biblioteca.")
+            self._log(tr("log.game_removed"))
 
     # ------------------------------------------------------------------
     # actions
@@ -1812,27 +1912,31 @@ class MainWindow(QMainWindow):
         if game is None:
             return
         if not game.exe_path.is_file():
-            QMessageBox.warning(self, "Jogo ausente", "O executável não existe mais neste caminho.")
+            QMessageBox.warning(self, tr("dialog.game_missing_title"), tr("dialog.game_missing_body"))
             return
         env = self.analysis.env if self.analysis else {}
         args = self.analysis.args if self.analysis else []
         try:
             winapi.launch(game.exe_path, args=list(args), env=dict(env))
         except OSError as exc:
-            QMessageBox.critical(self, "Erro ao iniciar", str(exc))
+            QMessageBox.critical(self, tr("dialog.launch_error_title"), str(exc))
             return
         self.store.touch_played(game)
         detail = ""
         if env:
             detail = " (" + ", ".join(f"{k}={v}" for k, v in env.items()) + ")"
-        self._log(f"Iniciando {game.exe_path.name}{detail}")
+        self._log(tr("log.launching", exe=game.exe_path.name, detail=detail))
 
     def _open_game_folder(self) -> None:
         if self.current_game is None:
             return
         folder = self.current_game.game_dir
         if not folder.is_dir():
-            QMessageBox.warning(self, "Pasta ausente", f"A pasta não existe mais:\n{folder}")
+            QMessageBox.warning(
+                self,
+                tr("dialog.folder_missing_title"),
+                tr("dialog.folder_missing_body", folder=folder),
+            )
             return
         winapi.open_folder(folder)
 
@@ -1842,27 +1946,32 @@ class MainWindow(QMainWindow):
             return
         if not game.preset_path.is_file():
             QMessageBox.information(
-                self, "Preset ausente", "O preset AniShade.ini ainda não foi criado. Instale primeiro."
+                self,
+                tr("dialog.preset_missing_title"),
+                tr("dialog.preset_missing_body"),
             )
             return
         try:
             winapi.open_file(game.preset_path)
         except OSError as exc:
-            QMessageBox.warning(self, "Erro ao abrir", str(exc))
+            QMessageBox.warning(self, tr("dialog.open_error_title"), str(exc))
 
     def _reanalyze(self) -> None:
         if self.current_game is not None:
             self._load_game(self.current_game)
             self._refresh_games(select_id=self.current_game.id)
-            self._log("Detecção atualizada.")
+            self._log(tr("log.detection_updated"))
 
     def _open_settings(self) -> None:
+        previous_lang = i18n.get_language()
         dialog = SettingsDialog(self.store, self)
         if dialog.exec() == QDialog.Accepted:
-            self._log("Configurações salvas.")
-            self.banner.setVisible(not reshade.list_cached())
-            if self.current_game is not None:
+            if i18n.get_language() != previous_lang:
+                self.retranslate_ui()
+            elif self.current_game is not None:
                 self._load_game(self.current_game)
+            self.banner.setVisible(not reshade.list_cached())
+            self._log(tr("log.settings_saved"))
 
     # ------------------------------------------------------------------
     # window events
@@ -1888,8 +1997,8 @@ class MainWindow(QMainWindow):
         if self.task is not None:
             QMessageBox.information(
                 self,
-                "Operação em andamento",
-                "Aguarde a operação atual terminar antes de fechar o AniShade.",
+                tr("dialog.busy_close_title"),
+                tr("dialog.busy_close_body"),
             )
             event.ignore()
             return

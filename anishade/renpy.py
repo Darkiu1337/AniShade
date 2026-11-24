@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import __version__, paths, winapi
+from .i18n import tr
 
 SUPPORTED_ENGINES = ("renpy",)
 
@@ -163,14 +164,14 @@ def fetch_latest_release(preferred_version: str | None = None, timeout: int = 30
         with _request(MOD_VERSIONS_URL, timeout=timeout) as response:
             entries = json.loads(response.read().decode("utf-8", "ignore"))
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-        raise RenpyModError(f"Nao foi possivel consultar 0x52.dev: {exc}") from exc
+        raise RenpyModError(tr("renpy_mod.fetch_failed", error=exc)) from exc
 
     if not isinstance(entries, list):
-        raise RenpyModError("Resposta inesperada da API do 0x52.dev.")
+        raise RenpyModError(tr("renpy_mod.unexpected_api"))
 
     picked = _pick_release_from_entries(entries, preferred_version=preferred_version)
     if picked is None:
-        raise RenpyModError("Nenhuma versao disponivel do Universal Ren'Py Mod foi encontrada em 0x52.dev.")
+        raise RenpyModError(tr("renpy_mod.no_release"))
     return picked
 
 
@@ -191,15 +192,13 @@ def extract_rpa(archive_path: str | Path) -> bytes:
                         chosen = info
                         break
             if chosen is None:
-                raise RenpyModError(
-                    f"Arquivo {URM_FILENAME} nao encontrado dentro do ZIP baixado de 0x52.dev."
-                )
+                raise RenpyModError(tr("renpy_mod.rpa_not_found", filename=URM_FILENAME))
             data = archive.read(chosen)
     except (zipfile.BadZipFile, OSError, KeyError) as exc:
-        raise RenpyModError(f"Arquivo ZIP do Universal Ren'Py Mod invalido ou corrompido: {exc}") from exc
+        raise RenpyModError(tr("renpy_mod.invalid_zip", error=exc)) from exc
 
     if len(data) < 1024 or not data.startswith(b"RPA-"):
-        raise RenpyModError(f"{URM_FILENAME} extraido nao parece um arquivo .rpa valido do Ren'Py.")
+        raise RenpyModError(tr("renpy_mod.invalid_rpa", filename=URM_FILENAME))
     return data
 
 
@@ -215,14 +214,14 @@ def download_archive(
         try:
             extract_rpa(target)
             if status:
-                status(f"Pacote Universal Ren'Py Mod {release.version} ja esta no cache de downloads.")
+                status(tr("renpy_mod.archive_cached", version=release.version))
             return target
         except RenpyModError:
             target.unlink(missing_ok=True)
 
     temporary = target.with_suffix(target.suffix + ".part")
     if status:
-        status(f"Baixando Universal Ren'Py Mod {release.version} de 0x52.dev ...")
+        status(tr("renpy_mod.downloading", version=release.version))
     try:
         with _request(release.url, timeout=60) as response, open(temporary, "wb") as handle:
             total = int(response.headers.get("Content-Length") or release.size or 0)
@@ -237,7 +236,7 @@ def download_archive(
                     progress(downloaded, total)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         temporary.unlink(missing_ok=True)
-        raise RenpyModError(f"Falha ao baixar o Universal Ren'Py Mod: {exc}") from exc
+        raise RenpyModError(tr("renpy_mod.download_failed", error=exc)) from exc
 
     try:
         extract_rpa(temporary)
@@ -247,10 +246,7 @@ def download_archive(
 
     temporary.replace(target)
     if status:
-        status(
-            f"Universal Ren'Py Mod {release.version} baixado "
-            f"({target.stat().st_size / 1048576:.1f} MB)."
-        )
+        status(tr("renpy_mod.downloaded", version=release.version, mb=target.stat().st_size / 1048576))
     return target
 
 
@@ -338,34 +334,32 @@ def ensure_release(
         for item in cached:
             if _normalize_version(item.version) == wanted:
                 if status:
-                    status(f"Usando Universal Ren'Py Mod {item.version} do cache local.")
+                    status(tr("renpy_mod.using_cached", version=item.version))
                 return item
     elif cached:
         if status:
-            status(f"Usando Universal Ren'Py Mod {cached[0].version} do cache local.")
+            status(tr("renpy_mod.using_cached", version=cached[0].version))
         return cached[0]
 
     if not allow_network:
         if cached:
             return cached[0]
-        raise RenpyModError(
-            "Nenhuma versao do Universal Ren'Py Mod esta no cache e a rede esta desativada."
-        )
+        raise RenpyModError(tr("renpy_mod.no_cache_offline"))
 
     if status:
-        status("Consultando a versao mais recente do Universal Ren'Py Mod em 0x52.dev ...")
+        status(tr("renpy_mod.checking_latest"))
     try:
         release = fetch_latest_release(preferred_version=preferred_version)
     except RenpyModError:
         if cached:
             if status:
-                status("Sem conexao com 0x52.dev; usando a versao em cache.")
+                status(tr("renpy_mod.offline_fallback"))
             return cached[0]
         raise
 
     archive = download_archive(release, progress=progress, status=status)
     if status:
-        status(f"Extraindo {URM_FILENAME} ...")
+        status(tr("renpy_mod.extracting", filename=URM_FILENAME))
     return cache_from_archive(archive, release)
 
 
@@ -382,12 +376,12 @@ def prune_cache(keep: int = 1) -> list[str]:
 def verified_rpa(cached: CachedUrm) -> Path:
     rpa = cached.rpa_path
     if not rpa.is_file():
-        raise RenpyModError(f"{URM_FILENAME} nao encontrado no cache local.")
+        raise RenpyModError(tr("renpy_mod.rpa_missing_cache", filename=URM_FILENAME))
     meta = cached.meta or {}
     expected = meta.get("sha256")
     if expected and winapi.sha256_file(rpa) != expected:
         raise RenpyModError(
-            f"{URM_FILENAME} no cache esta corrompido. Remova {cached.folder} e baixe novamente."
+            tr("renpy_mod.rpa_corrupt_cache", filename=URM_FILENAME, folder=cached.folder)
         )
     return rpa
 
@@ -446,7 +440,7 @@ def install_urm(
     if renpy_game is None:
         return UrmInstallResult(
             installed=False,
-            warning="Pasta 'game/' do Ren'Py nao encontrada ao lado do executavel.",
+            warning=tr("renpy_mod.game_dir_missing"),
         )
 
     writer = write_fn or _default_write
@@ -498,14 +492,14 @@ def uninstall_urm(
     if expected and winapi.sha256_file(target) != expected and backup_fn:
         saved = backup_fn(target, URM_FILENAME)
         if saved and log:
-            log(f"{URM_FILENAME} modificado foi salvo em backup antes de remover: {saved}")
+            log(tr("renpy_mod.modified_backed_up", filename=URM_FILENAME, backup=saved))
 
     try:
         target.unlink()
         removed.append(rel_path or URM_FILENAME)
     except OSError as exc:
         if log:
-            log(f"Nao foi possivel remover {URM_FILENAME}: {exc}")
+            log(tr("renpy_mod.remove_failed", filename=URM_FILENAME, error=exc))
     return removed
 
 
@@ -519,5 +513,5 @@ def inspect_urm(game_dir: Path, meta: dict | None) -> tuple[bool, list[str]]:
         renpy_game = find_game_dir(game_dir)
         target = (renpy_game / URM_FILENAME) if renpy_game is not None else None
     if target is None or not target.is_file():
-        return False, [f"Mod Universal Ren'Py Mod ({URM_FILENAME}) ausente na pasta game/."]
+        return False, [tr("renpy_mod.problem_missing", filename=URM_FILENAME)]
     return True, []

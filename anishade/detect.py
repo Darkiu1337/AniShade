@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import engines, nwjs, renpy, rpgmaker, winapi
+from .i18n import tr
 from .pe import PEError, PEInfo, executable_strings, guess_api, read_pe
 
 API_DLL = {
@@ -28,8 +29,15 @@ API_LABELS = {
     "opengl": "OpenGL",
     "ddraw": "DirectDraw",
     "vulkan": "Vulkan",
-    "desconhecida": "Desconhecida",
+    "unknown": "Unknown",
 }
+
+
+def api_label(api: str) -> str:
+    """Return the localized display label for a graphics API key."""
+    if api in ("unknown", "desconhecida", ""):
+        return tr("common.unknown")
+    return API_LABELS.get(api, api)
 
 #: proxy DLL names ReShade can use for each API family
 DLL_CHOICES = {
@@ -72,7 +80,7 @@ class GameAnalysis:
     engine: engines.Engine = engines.ENGINES["unknown"]
     engine_evidence: list[str] = field(default_factory=list)
     api: str = "dxgi"
-    api_source: str = "padrao"
+    api_source: str = ""
     dll_name: str = "dxgi.dll"
     dll_alternatives: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -302,7 +310,7 @@ def analyze(exe: str | Path, api_override: str | None = None, engine_override: s
     try:
         analysis.pe = read_pe(exe)
     except (PEError, OSError) as exc:
-        analysis.warnings.append(f"Nao foi possivel ler o cabecalho do executavel ({exc}).")
+        analysis.warnings.append(tr("detect.pe_read_error", error=exc))
 
     version = winapi.file_version_info(exe)
     analysis.file_description = version.get("FileDescription", "") or ""
@@ -330,7 +338,7 @@ def analyze(exe: str | Path, api_override: str | None = None, engine_override: s
     engine, evidence = engines.match_engine(ctx)
     if engine_override and engine_override in engines.ENGINES:
         engine = engines.ENGINES[engine_override]
-        evidence = [f"engine definida manualmente: {engine.name}"]
+        evidence = [tr("detect.manual_engine", name=engine.name)]
     analysis.engine = engine
     analysis.engine_evidence = evidence
     analysis.notes = list(engine.notes)
@@ -341,22 +349,15 @@ def analyze(exe: str | Path, api_override: str | None = None, engine_override: s
         markers = executable_strings(exe, ["godot engine v4", "godot engine v3"])
         if "godot engine v4" in markers:
             analysis.args = ["--rendering-driver", "opengl3"]
-            analysis.notes.append(
-                "Godot 4 detectado: abra pelo botão Jogar (ou pelo .bat) para forçar OpenGL 3."
-            )
-            analysis.warnings.append(
-                "Godot 4 usa Vulkan por padrão. Abrir o .exe direto pode impedir o ReShade de carregar."
-            )
+            analysis.notes.append(tr("detect.godot4_note"))
+            analysis.warnings.append(tr("detect.godot4_warn"))
         elif "godot engine v3" in markers:
-            analysis.notes.append("Godot 3 detectado: renderiza em OpenGL 3 (opengl32.dll).")
+            analysis.notes.append(tr("detect.godot3_note"))
 
     size = _detect_content_size(game_dir)
     if size:
         analysis.content_size = size
-        analysis.notes.append(
-            f"Resolução interna detectada: {size[0]}x{size[1]}. "
-            "A tela inteira é filtrada; a proteção contra ruído/feedback nas bordas é automática no shader."
-        )
+        analysis.notes.append(tr("detect.content_size_note", w=size[0], h=size[1]))
 
     if rpgmaker.is_supported_engine(engine.key):
         analysis.nwjs_version = nwjs.detect_game_nwjs_version(game_dir, exe)
@@ -367,7 +368,7 @@ def analyze(exe: str | Path, api_override: str | None = None, engine_override: s
             except ValueError:
                 analysis.rpgmaker_plugins_js = str(js_dir / "plugins.js")
             analysis.notes.append(
-                f"Plugin {rpgmaker.PLUGIN_NAME} (tecla H para ocultar caixa de texto) disponível em {analysis.rpgmaker_plugins_js}."
+                tr("detect.rpgm_plugin_note", name=rpgmaker.PLUGIN_NAME, path=analysis.rpgmaker_plugins_js)
             )
 
     if renpy.is_supported_engine(engine.key):
@@ -384,29 +385,29 @@ def analyze(exe: str | Path, api_override: str | None = None, engine_override: s
     api = None
     if api_override:
         api = api_override
-        analysis.api_source = "definida manualmente"
+        analysis.api_source = tr("detect.api_source.manual")
     elif log_api and log_api != "vulkan":
         api = log_api
-        analysis.api_source = "log do ReShade"
+        analysis.api_source = tr("detect.api_source.log")
     elif pe_api:
         api = pe_api
-        analysis.api_source = "importacoes do executavel"
+        analysis.api_source = tr("detect.api_source.imports")
     elif engine.api:
         api = engine.api
-        analysis.api_source = "engine detectada"
+        analysis.api_source = tr("detect.api_source.engine")
     elif engine.key == "godot" and analysis.args:
         api = "opengl"
-        analysis.api_source = "Godot 4 com launcher OpenGL"
+        analysis.api_source = tr("detect.api_source.godot4")
     else:
         api = "dxgi"
-        analysis.api_source = "padrao (nao detectada)"
+        analysis.api_source = tr("detect.api_source.fallback")
 
     # Ren'Py picks its renderer at runtime: ANGLE libs next to the exe mean D3D9.
     if engine.key == "renpy" and not api_override:
         has_angle = (game_dir / "libEGL.dll").is_file() or (game_dir / "libGLESv2.dll").is_file()
         if has_angle and api in ("opengl", "dxgi") and not pe_api:
             api = "d3d9"
-            analysis.api_source = "bibliotecas ANGLE na pasta do jogo"
+            analysis.api_source = tr("detect.api_source.angle")
             analysis.env["RENPY_RENDERER"] = "angle2"
         elif not has_angle:
             analysis.env["RENPY_RENDERER"] = "gl2"
@@ -420,23 +421,18 @@ def analyze(exe: str | Path, api_override: str | None = None, engine_override: s
     analysis.dll_alternatives = list(choices[1:])
 
     if analysis.api == "vulkan":
-        analysis.warnings.append(
-            "Vulkan detectado: ReShade nao carrega por proxy DLL. "
-            "Inicie o jogo em Direct3D 11/OpenGL (ex.: -force-d3d11) ou use a injecao global do ReShade."
-        )
+        analysis.warnings.append(tr("detect.warn_vulkan"))
 
     if analysis.pe:
         if analysis.pe.bits == 32:
-            analysis.warnings.append("Jogo de 32 bits: o ReShade32.dll sera usado (limitacao de memoria do processo).")
+            analysis.warnings.append(tr("detect.warn_32bit"))
         if analysis.pe.is_dll:
-            analysis.warnings.append("O arquivo selecionado e uma DLL, nao um executavel.")
+            analysis.warnings.append(tr("detect.warn_is_dll"))
     else:
-        analysis.warnings.append("Sem informacoes de arquitetura: sera assumido 64 bits.")
+        analysis.warnings.append(tr("detect.warn_no_arch"))
 
     if exe.name.lower() in LAUNCHER_NAMES:
-        analysis.warnings.append(
-            f"'{exe.name}' parece um launcher/configurador. Prefira o executavel real do jogo."
-        )
+        analysis.warnings.append(tr("detect.warn_launcher", name=exe.name))
 
     try:
         executables = sorted(
@@ -448,9 +444,7 @@ def analyze(exe: str | Path, api_override: str | None = None, engine_override: s
         executables = []
     analysis.other_executables = [name for name in executables if name.lower() != exe.name.lower()]
     if len(analysis.other_executables) > 6:
-        analysis.notes.append(
-            "Existem muitos .exe nessa pasta; confirme que o escolhido e o que abre o jogo de fato."
-        )
+        analysis.notes.append(tr("detect.note_many_exes"))
 
     # Existing ReShade install / name conflicts
     for candidate in (*choices, "ReShade64.dll", "ReShade32.dll"):
@@ -466,14 +460,10 @@ def analyze(exe: str | Path, api_override: str | None = None, engine_override: s
 
     if analysis.conflicting_dlls:
         analysis.warnings.append(
-            "Ja existe DLL com nome de proxy na pasta ("
-            + ", ".join(analysis.conflicting_dlls)
-            + "). O AniShade usa outro nome quando possivel e nunca sobrescreve sem confirmacao."
+            tr("detect.warn_conflicts", dlls=", ".join(analysis.conflicting_dlls))
         )
 
     if not winapi.folder_writable(game_dir):
-        analysis.warnings.append(
-            "A pasta do jogo nao permite escrita sem privilegios de administrador."
-        )
+        analysis.warnings.append(tr("detect.warn_not_writable"))
 
     return analysis

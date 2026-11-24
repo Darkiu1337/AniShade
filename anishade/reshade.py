@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import __version__, paths
+from .i18n import tr
 from .winapi import sha256_bytes, sha256_file
 
 SITE_URL = "https://reshade.me/"
@@ -78,11 +79,11 @@ def fetch_latest_release(timeout: int = 30) -> ReleaseInfo:
         with _request(SITE_URL, timeout=timeout) as response:
             html = response.read().decode("utf-8", "ignore")
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise ReshadeError(f"Nao foi possivel acessar reshade.me: {exc}") from exc
+        raise ReshadeError(tr("reshade.fetch_failed", error=exc)) from exc
 
     versions = sorted({match for match in _VERSION_RE.findall(html)}, key=_version_key)
     if not versions:
-        raise ReshadeError("Nao encontrei um link de download do ReShade na pagina oficial.")
+        raise ReshadeError(tr("reshade.no_link"))
     version = versions[-1]
     addon = _ADDON_RE.search(html)
     return ReleaseInfo(
@@ -101,12 +102,12 @@ def download_setup(
     target = paths.DOWNLOAD_DIR / f"ReShade_Setup_{release.version}.exe"
     if target.is_file() and target.stat().st_size > 1_000_000:
         if status:
-            status(f"Instalador do ReShade {release.version} ja esta no cache.")
+            status(tr("reshade.setup_cached", version=release.version))
         return target
 
     temporary = target.with_suffix(target.suffix + ".part")
     if status:
-        status(f"Baixando ReShade {release.version} de reshade.me ...")
+        status(tr("reshade.downloading", version=release.version))
     try:
         with _request(release.url, timeout=60) as response, open(temporary, "wb") as handle:
             total = int(response.headers.get("Content-Length") or 0)
@@ -121,11 +122,11 @@ def download_setup(
                     progress(downloaded, total)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         temporary.unlink(missing_ok=True)
-        raise ReshadeError(f"Falha ao baixar o ReShade: {exc}") from exc
+        raise ReshadeError(tr("reshade.download_failed", error=exc)) from exc
 
     if temporary.stat().st_size < 1_000_000:
         temporary.unlink(missing_ok=True)
-        raise ReshadeError("O download do ReShade veio incompleto.")
+        raise ReshadeError(tr("reshade.download_incomplete"))
 
     # validate that the DLLs can be extracted before keeping the file
     try:
@@ -135,7 +136,7 @@ def download_setup(
         raise
     temporary.replace(target)
     if status:
-        status(f"ReShade {release.version} baixado ({target.stat().st_size / 1048576:.1f} MB).")
+        status(tr("reshade.downloaded", version=release.version, mb=target.stat().st_size / 1048576))
     return target
 
 
@@ -143,7 +144,7 @@ def extract_dlls(setup_path: str | Path) -> dict[str, bytes]:
     """Pull ReShade32.dll/ReShade64.dll out of the archive appended to setup.exe."""
     data = Path(setup_path).read_bytes()
     if len(data) < 1_000_000:
-        raise ReshadeError("Arquivo do instalador muito pequeno para ser o ReShade Setup.")
+        raise ReshadeError(tr("reshade.setup_too_small"))
 
     signature = b"PK\x03\x04"
     offset = data.find(signature)
@@ -159,16 +160,13 @@ def extract_dlls(setup_path: str | Path) -> dict[str, bytes]:
                 archive.close()
                 for name, blob in payload.items():
                     if not blob.startswith(b"MZ"):
-                        raise ReshadeError(f"{name} extraido nao parece uma DLL valida.")
+                        raise ReshadeError(tr("reshade.invalid_dll", name=name))
                 return payload
         except (zipfile.BadZipFile, OSError, KeyError):
             pass
         offset = data.find(signature, offset + 1)
 
-    raise ReshadeError(
-        "Nao encontrei as DLLs dentro do instalador do ReShade. "
-        "Baixe novamente em https://reshade.me."
-    )
+    raise ReshadeError(tr("reshade.dlls_not_found"))
 
 
 def _meta_path(folder: Path) -> Path:
@@ -257,26 +255,26 @@ def ensure_release(
         for item in cached:
             if item.version == preferred_version:
                 if status:
-                    status(f"Usando ReShade {item.version} do cache local.")
+                    status(tr("reshade.using_cached", version=item.version))
                 return item
     elif cached:
         if status:
-            status(f"Usando ReShade {cached[0].version} do cache local.")
+            status(tr("reshade.using_cached", version=cached[0].version))
         return cached[0]
 
     if not allow_network:
         if cached:
             return cached[0]
-        raise ReshadeError("Nenhuma versao do ReShade esta no cache e a rede esta desativada.")
+        raise ReshadeError(tr("reshade.no_cache_offline"))
 
     if status:
-        status("Consultando a versao mais recente do ReShade ...")
+        status(tr("reshade.checking_latest"))
     try:
         release = fetch_latest_release()
     except ReshadeError:
         if cached:
             if status:
-                status("Sem conexao com reshade.me; usando a versao em cache.")
+                status(tr("reshade.offline_fallback"))
             return cached[0]
         raise
 
@@ -288,7 +286,7 @@ def ensure_release(
 
     setup = download_setup(release, progress=progress, status=status)
     if status:
-        status("Extraindo ReShade32.dll e ReShade64.dll do instalador ...")
+        status(tr("reshade.extracting"))
     return cache_from_setup(setup, release.version, release.url)
 
 
@@ -305,13 +303,11 @@ def prune_cache(keep: int = 1) -> list[str]:
 def verified_dll(release: CachedReShade, bits: int) -> Path:
     dll = release.dll_for(bits)
     if not dll.is_file():
-        raise ReshadeError(f"{dll.name} nao encontrado no cache do ReShade.")
+        raise ReshadeError(tr("reshade.dll_missing_cache", name=dll.name))
     meta = release.meta or {}
     expected = meta.get("sha256_64" if bits == 64 else "sha256_32")
     if expected and sha256_file(dll) != expected:
-        raise ReshadeError(
-            f"{dll.name} no cache esta corrompido. Remova {release.folder} e baixe novamente."
-        )
+        raise ReshadeError(tr("reshade.dll_corrupt_cache", name=dll.name, folder=release.folder))
     return dll
 
 

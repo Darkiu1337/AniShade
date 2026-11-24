@@ -10,212 +10,206 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .i18n import tr
+
 
 @dataclass(frozen=True)
 class Engine:
     key: str
-    name: str
+    _name: str
     api: str | None = None
-    notes: tuple[str, ...] = ()
+    _note_keys: tuple[str, ...] = ()
     env: tuple[tuple[str, str], ...] = ()
     args: tuple[str, ...] = ()
     alternatives: tuple[str, ...] = ()
-    fix_hint: str = ""
+    _fix_hint_key: str = ""
+
+    @property
+    def name(self) -> str:
+        if self.key == "unknown":
+            return tr("engine.unknown.name")
+        return self._name
+
+    @property
+    def notes(self) -> tuple[str, ...]:
+        return tuple(tr(key) for key in self._note_keys)
+
+    @property
+    def fix_hint(self) -> str:
+        return tr(self._fix_hint_key) if self._fix_hint_key else ""
 
 
 ENGINES: dict[str, Engine] = {
     "renpy": Engine(
         key="renpy",
-        name="Ren'Py",
+        _name="Ren'Py",
         api="opengl",
-        notes=(
-            "Ren'Py desenha com OpenGL (renderer gl2) ou ANGLE/Direct3D 9 (renderer angle2).",
-            "Se o overlay nao aparecer, troque entre opengl32.dll (gl2) e d3d9.dll (angle2).",
-            "A resolucao interna costuma ser baixa: os shaders Restore do Anime4K sao ideais aqui.",
-        ),
+        _note_keys=("engine.renpy.note1", "engine.renpy.note2", "engine.renpy.note3"),
         env=(("RENPY_RENDERER", "gl2"),),
         alternatives=("d3d9", "opengl"),
-        fix_hint="Forcar OpenGL (gl2) ao iniciar pelo AniShade e criar um .bat com a variavel RENPY_RENDERER.",
+        _fix_hint_key="engine.renpy.fix_hint",
     ),
     "rpgmaker_mv": Engine(
         key="rpgmaker_mv",
-        name="RPG Maker MV/MZ (NW.js)",
+        _name="RPG Maker MV/MZ (NW.js)",
         api="dxgi",
-        notes=(
-            "MV/MZ rodam dentro do NW.js (Chromium) usando ANGLE sobre Direct3D 11.",
-            "Use dxgi.dll. Se o overlay nao aparecer, tente d3d11.dll (o Chromium tambem carrega esse nome).",
-            "Evite marcar 'Performance Mode' em jogos MV: o overlay precisa do contexto do Chromium.",
-        ),
+        _note_keys=("engine.rpgmaker_mv.note1", "engine.rpgmaker_mv.note2", "engine.rpgmaker_mv.note3"),
         alternatives=("dxgi", "d3d11"),
-        fix_hint="Renomear a DLL do ReShade para d3d11.dll quando dxgi.dll nao for carregada.",
+        _fix_hint_key="engine.rpgmaker_mv.fix_hint",
     ),
     "rpgmaker_rgss": Engine(
         key="rpgmaker_rgss",
-        name="RPG Maker XP/VX/VX Ace (RGSS)",
+        _name="RPG Maker XP/VX/VX Ace (RGSS)",
         api="d3d9",
-        notes=(
-            "RGSS usa Direct3D 9; a DLL correta e d3d9.dll.",
-            "Alguns jogos trazem um d3d9.dll proprio (ENB/RT). Nesse caso use a alternativa d3d9.",
-        ),
+        _note_keys=("engine.rpgmaker_rgss.note1", "engine.rpgmaker_rgss.note2"),
         alternatives=("d3d9",),
-        fix_hint="Verificar conflito com d3d9.dll de terceiros antes de instalar.",
+        _fix_hint_key="engine.rpgmaker_rgss.fix_hint",
     ),
     "rpgmaker_2000": Engine(
         key="rpgmaker_2000",
-        name="RPG Maker 2000/2003",
+        _name="RPG Maker 2000/2003",
         api="ddraw",
-        notes=(
-            "RPG Maker 2000/2003 desenha com DirectDraw; o ReShade usa ddraw.dll.",
-            "Em Windows modernos o jogo pode precisar de compatibilidade; teste sem o ReShade antes.",
-        ),
+        _note_keys=("engine.rpgmaker_2000.note1", "engine.rpgmaker_2000.note2"),
         alternatives=("ddraw", "d3d9"),
     ),
     "yuris": Engine(
         key="yuris",
-        name="YU-RIS",
+        _name="YU-RIS",
         api="d3d9",
-        notes=("YU-RIS usa Direct3D 9. Comum em VNs japonesas com arquivos .ypf.",),
+        _note_keys=("engine.yuris.note1",),
         alternatives=("d3d9",),
     ),
     "catsystem2": Engine(
         key="catsystem2",
-        name="CatSystem2",
+        _name="CatSystem2",
         api="d3d9",
-        notes=("CatSystem2 usa Direct3D 9 (arquivos .cst/.int).",),
+        _note_keys=("engine.catsystem2.note1",),
         alternatives=("d3d9",),
     ),
     "reallive": Engine(
         key="reallive",
-        name="RealLive (Key)",
+        _name="RealLive (Key)",
         api="d3d9",
-        notes=("RealLive usa Direct3D 9; jogos antigos costumam ser 32 bits.",),
+        _note_keys=("engine.reallive.note1",),
         alternatives=("d3d9",),
     ),
     "livemaker": Engine(
         key="livemaker",
-        name="LiveMaker",
+        _name="LiveMaker",
         api="d3d9",
-        notes=("LiveMaker usa Direct3D 9.",),
+        _note_keys=("engine.livemaker.note1",),
         alternatives=("d3d9",),
     ),
     "cmvs": Engine(
         key="cmvs",
-        name="CMVS",
+        _name="CMVS",
         api="d3d9",
-        notes=("CMVS usa Direct3D 9 (arquivos .cpz).",),
+        _note_keys=("engine.cmvs.note1",),
         alternatives=("d3d9",),
     ),
     "nitroplus": Engine(
         key="nitroplus",
-        name="Nitroplus",
+        _name="Nitroplus",
         api="d3d9",
-        notes=("Engine Nitroplus usa Direct3D 9 (arquivos .npk).",),
+        _note_keys=("engine.nitroplus.note1",),
         alternatives=("d3d9",),
     ),
     "kirikiri": Engine(
         key="kirikiri",
-        name="KiriKiri / KAG (XP3)",
+        _name="KiriKiri / KAG (XP3)",
         api="d3d9",
-        notes=(
-            "KiriKiri (KAG) usa Direct3D 9 na maioria dos builds.",
-            "Se o jogo travar ao abrir com ReShade, tente desativar o overlay de entrada pelo ReShade.ini.",
-        ),
+        _note_keys=("engine.kirikiri.note1", "engine.kirikiri.note2"),
         alternatives=("d3d9",),
     ),
     "siglus": Engine(
         key="siglus",
-        name="SiglusEngine (Key/Visual Arts)",
+        _name="SiglusEngine (Key/Visual Arts)",
         api="d3d9",
-        notes=("SiglusEngine usa Direct3D 9. Alguns titulos antigos precisam de d3d9.dll de 32 bits.",),
+        _note_keys=("engine.siglus.note1",),
         alternatives=("d3d9",),
     ),
     "bgi": Engine(
         key="bgi",
-        name="BGI / Ethornell",
+        _name="BGI / Ethornell",
         api="d3d9",
-        notes=("BGI/Ethornell usa Direct3D 9; o motor costuma rodar em 32 bits.",),
+        _note_keys=("engine.bgi.note1",),
         alternatives=("d3d9",),
     ),
     "nscripter": Engine(
         key="nscripter",
-        name="NScripter / ONScripter",
+        _name="NScripter / ONScripter",
         api=None,
-        notes=(
-            "NScripter antigo usa DirectDraw/Direct3D 9; ONScripter usa SDL (OpenGL ou Direct3D).",
-            "A API e detectada pelas importacoes do .exe; confira o campo API antes de instalar.",
-        ),
+        _note_keys=("engine.nscripter.note1", "engine.nscripter.note2"),
         alternatives=("d3d9", "opengl", "ddraw"),
     ),
     "wolf": Engine(
         key="wolf",
-        name="WOLF RPG Editor",
+        _name="WOLF RPG Editor",
         api="d3d9",
-        notes=("WOLF RPG Editor usa Direct3D 9 (d3d9.dll).",),
+        _note_keys=("engine.wolf.note1",),
         alternatives=("d3d9",),
     ),
     "unity": Engine(
         key="unity",
-        name="Unity",
+        _name="Unity",
         api="dxgi",
-        notes=(
-            "Unity usa Direct3D 11 por padrao; dxgi.dll e o nome recomendado.",
-            "Jogos Unity costumam precisar de 'Copy depth buffer' desligado (ReShade 6 ja cuida disso).",
-            "Se o jogo usar Vulkan, o ReShade nao carrega por proxy DLL: inicie com -force-d3d11.",
-        ),
+        _note_keys=("engine.unity.note1", "engine.unity.note2", "engine.unity.note3"),
         alternatives=("dxgi", "d3d11"),
-        fix_hint="Criar launcher com -force-d3d11 quando o jogo abrir em Vulkan.",
+        _fix_hint_key="engine.unity.fix_hint",
     ),
     "unreal": Engine(
         key="unreal",
-        name="Unreal Engine",
+        _name="Unreal Engine",
         api="dxgi",
-        notes=(
-            "Unreal Engine 4/5 usa Direct3D 11/12 (dxgi.dll).",
-            "Em UE5 com Lumen/Nanite o custo do Anime4K pode ficar alto; prefira variantes S/M.",
-        ),
+        _note_keys=("engine.unreal.note1", "engine.unreal.note2"),
         alternatives=("dxgi", "d3d11"),
     ),
     "godot": Engine(
         key="godot",
-        name="Godot",
+        _name="Godot",
         api=None,
-        notes=(
-            "Godot 3 usa OpenGL 3 (opengl32.dll); Godot 4 usa Vulkan por padrao.",
-            "Para Godot 4 use o launcher com '--rendering-driver opengl3' para permitir o ReShade.",
-        ),
+        _note_keys=("engine.godot.note1", "engine.godot.note2"),
         args=(),
         alternatives=("opengl", "dxgi"),
-        fix_hint="Iniciar com --rendering-driver opengl3 e instalar opengl32.dll.",
+        _fix_hint_key="engine.godot.fix_hint",
     ),
     "gamemaker": Engine(
         key="gamemaker",
-        name="GameMaker Studio",
+        _name="GameMaker Studio",
         api="dxgi",
-        notes=("GameMaker moderno usa Direct3D 11 (dxgi.dll).",),
+        _note_keys=("engine.gamemaker.note1",),
         alternatives=("dxgi", "d3d9"),
     ),
     "artemis": Engine(
         key="artemis",
-        name="Artemis Engine",
+        _name="Artemis Engine",
         api="d3d9",
-        notes=("Artemis usa Direct3D 9.",),
+        _note_keys=("engine.artemis.note1",),
         alternatives=("d3d9",),
     ),
     "majiro": Engine(
         key="majiro",
-        name="Majiro",
+        _name="Majiro",
         api="d3d9",
-        notes=("Majiro usa Direct3D 9.",),
+        _note_keys=("engine.majiro.note1",),
         alternatives=("d3d9",),
     ),
     "unknown": Engine(
         key="unknown",
-        name="Desconhecida",
+        _name="Unknown",
         api=None,
-        notes=("Engine nao reconhecida: a API foi inferida pelas importacoes do executavel.",),
+        _note_keys=("engine.unknown.note1",),
         alternatives=("dxgi", "d3d9", "opengl"),
     ),
 }
+
+
+def engine_display_name(engine_key: str, fallback: str = "") -> str:
+    """Return the localized display name for an engine key."""
+    engine = ENGINES.get(engine_key)
+    if engine is not None:
+        return engine.name
+    return fallback or tr("engine.unknown.name")
 
 
 @dataclass
@@ -273,80 +267,80 @@ class EngineContext:
 
 def _match_renpy(ctx: EngineContext) -> str | None:
     if ctx.has_dir("renpy") or ctx.any_glob("renpy/common/*.rpy", "game/*.rpyc", "game/*.rpa"):
-        return "pasta renpy/ ou arquivos .rpyc/.rpa"
+        return tr("evidence.renpy_dir")
     if any(name.startswith(("lib/py3-", "lib/python")) for name in ctx.top_dirs):
-        return "lib/py3-* (runtime Python do Ren'Py)"
+        return tr("evidence.renpy_lib")
     if ctx.has_file(".rpy", ".rpyc", ".rpa"):
-        return "arquivos .rpy/.rpyc/.rpa"
+        return tr("evidence.renpy_files")
     return None
 
 
 def _match_rpgmaker_mv(ctx: EngineContext) -> str | None:
     if ctx.any_glob("www/js/rmmz_core.js", "www/js/rpg_core.js", "js/rmmz_core.js", "js/rpg_core.js"):
-        return "js/rmmz_core.js (MV/MZ)"
+        return tr("evidence.rpgm_core")
     if ctx.has_dir("www") and (ctx.has_file("nw.dll", "package.json", "nw_elf.dll")):
-        return "pasta www/ + NW.js"
+        return tr("evidence.rpgm_www")
     if ctx.has_file("package.json") and ctx.has_file("index.html"):
-        return "package.json + index.html (NW.js)"
+        return tr("evidence.rpgm_pkg")
     return None
 
 
 def _match_rgss(ctx: EngineContext) -> str | None:
     rgss = next((name for name in ctx.top_files if name.startswith("rgss") and name.endswith(".dll")), None)
     if rgss:
-        return f"{rgss} (RGSS)"
+        return tr("evidence.rgss_dll", name=rgss)
     if ctx.has_file("game.ini", "game.rvproj2", "game.rxproj") and ctx.any_glob("data/*.rxdata", "data/*.rvdata", "data/*.rvdata2"):
-        return "Game.ini + data/ (RPG Maker)"
+        return tr("evidence.rgss_data")
     return None
 
 
 def _match_rpgmaker_2000(ctx: EngineContext) -> str | None:
     if ctx.has_file("rpg_rt.exe", ".ldb"):
-        return "RPG_RT.exe / .ldb (RPG Maker 2000/2003)"
+        return tr("evidence.rpgm2k")
     return None
 
 
 def _match_yuris(ctx: EngineContext) -> str | None:
     if ctx.has_file(".ypf"):
-        return "arquivos .ypf (YU-RIS)"
+        return tr("evidence.yuris")
     return None
 
 
 def _match_catsystem2(ctx: EngineContext) -> str | None:
     if ctx.has_file(".cst", ".noa") and ctx.has_file(".int", ".cst"):
-        return "arquivos .cst/.int (CatSystem2)"
+        return tr("evidence.catsystem2")
     return None
 
 
 def _match_reallive(ctx: EngineContext) -> str | None:
     if ctx.has_file(".g00", "seen.txt"):
-        return "arquivos .g00 (RealLive)"
+        return tr("evidence.reallive")
     return None
 
 
 def _match_livemaker(ctx: EngineContext) -> str | None:
     if ctx.has_file(".lsb"):
-        return "arquivos .lsb (LiveMaker)"
+        return tr("evidence.livemaker")
     return None
 
 
 def _match_cmvs(ctx: EngineContext) -> str | None:
     if ctx.has_file(".cpz"):
-        return "arquivos .cpz (CMVS)"
+        return tr("evidence.cmvs")
     return None
 
 
 def _match_nitroplus(ctx: EngineContext) -> str | None:
     if ctx.has_file(".npk"):
-        return "arquivos .npk (Nitroplus)"
+        return tr("evidence.nitroplus")
     return None
 
 
 def _match_kirikiri(ctx: EngineContext) -> str | None:
     if ctx.has_file(".xp3"):
-        return "arquivos .xp3"
+        return tr("evidence.kirikiri_xp3")
     if ctx.has_dir("kirikiri2") or ctx.has_file("krkr.exe", "kirikiri.exe"):
-        return "pasta kirikiri2/ ou krkr.exe"
+        return tr("evidence.kirikiri_dir")
     return None
 
 
@@ -383,7 +377,7 @@ def _match_unity(ctx: EngineContext) -> str | None:
         return "UnityPlayer.dll"
     if any(name.endswith("_data") and name not in ("data",) for name in ctx.top_dirs):
         if ctx.any_glob("*_Data/globalgamemanagers", "*_Data/level0"):
-            return "pasta *_Data/ (Unity)"
+            return tr("evidence.unity_data")
     return None
 
 
@@ -396,7 +390,7 @@ def _match_unreal(ctx: EngineContext) -> str | None:
 
 def _match_godot(ctx: EngineContext) -> str | None:
     if ctx.has_file(".pck") and not ctx.has_file(".xp3"):
-        return "arquivo .pck"
+        return tr("evidence.godot_pck")
     return None
 
 
@@ -408,7 +402,7 @@ def _match_gamemaker(ctx: EngineContext) -> str | None:
 
 def _match_artemis(ctx: EngineContext) -> str | None:
     if ctx.has_file(".pfs", ".arg", ".alf"):
-        return "arquivos .pfs/.arg (Artemis)"
+        return tr("evidence.artemis")
     return None
 
 

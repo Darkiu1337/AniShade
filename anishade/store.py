@@ -10,7 +10,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from . import anime4k, paths
+from . import anime4k, i18n, paths
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -41,7 +41,7 @@ class Game:
     name: str
     exe: str
     engine_key: str = "unknown"
-    engine_name: str = "Desconhecida"
+    engine_name: str = "Unknown"
     api: str = "dxgi"
     dll_name: str = "dxgi.dll"
     bits: int = 64
@@ -97,6 +97,7 @@ class Settings:
         self.rpgmaker_no_alt_skip: bool = bool(data.get("rpgmaker_no_alt_skip", True))
         self.rpgmaker_save_slots_100: bool = bool(data.get("rpgmaker_save_slots_100", True))
         self.renpy_urm: bool = bool(data.get("renpy_urm", False))
+        self.language: str = i18n.normalize_language(data.get("language"))
         self.theme: str = data.get("theme", "dark")
         self.last_dir: str = data.get("last_dir", "")
         self.confirm_before_overwrite: bool = bool(data.get("confirm_before_overwrite", True))

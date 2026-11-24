@@ -44,6 +44,9 @@ def main() -> int:
         assert window.margin_spin.value() == 0
         assert abs(window.aspect_spin.value() - 1.5) < 0.001
         assert window.install_button.text() in (
+            "Install ReShade + Anime4K",
+            "Apply changes",
+            "Reinstall",
             "Instalar ReShade + Anime4K",
             "Aplicar alterações",
             "Reinstalar",
