@@ -32,6 +32,9 @@ O ReShade é baixado uma única vez do site oficial e fica em cache para todos o
   para o cache local, reutiliza em todos os jogos RPG Maker MV/MZ, corrige problemas comuns do
   `package.json` (`name` ausente, `--autoplay-policy`, flags V8 obsoletas, compatibilidade
   `process.mainModule`) e permite restaurar o backup original.
+- **Universal Ren'Py Mod (URM) para jogos Ren'Py**: interruptor direto na tela de jogos Ren'Py que
+  baixa o `0x52_URM.rpa` oficial de [0x52.dev](https://0x52.dev/mods/Universal-Ren-Py-Mod-1000) uma
+  única vez para o cache local e instala ou remove o arquivo em `game/0x52_URM.rpa` com um clique.
 - **Home abre o overlay do ReShade** (garantido no `ReShade.ini`).
 - **Sem banners ou spinner no jogo**: o splash inicial do ReShade ("ReShade 6.x...") e o
   círculo de carregamento no canto superior esquerdo (ao alternar janela/fullscreen) são
@@ -140,6 +143,7 @@ restauração completa do Anime4K — sem depender de recorte por proporção do
 | `(www\)js\plugins\AniShade_HideTextbox.js` | plugin RPG Maker MV/MZ para ocultar a caixa de texto com `H` |
 | `(www\)js\plugins\AniShade_NoAltSkip.js` | plugin RPG Maker MV/MZ para impedir `Alt` / `Alt+Tab` de pular diálogos |
 | `(www\)js\plugins\AniShade_SaveSlots100.js` | plugin RPG Maker MV/MZ que libera 100 slots manuais de save |
+| `game\0x52_URM.rpa` | Universal Ren'Py Mod (opcional, ativado pelo interruptor em jogos Ren'Py) |
 
 O manifesto de cada jogo fica em `%LOCALAPPDATA%\AniShade\games\<id>.json`, com hash de cada
 arquivo. É isso que permite desinstalar sem tocar em arquivos de terceiros.
@@ -149,6 +153,7 @@ arquivo. É isso que permite desinstalar sem tocar em arquivos de terceiros.
 ## Cache e pastas
 
 - ReShade: `%LOCALAPPDATA%\AniShade\cache\reshade\<versão>\`
+- Universal Ren'Py Mod: `%LOCALAPPDATA%\AniShade\cache\urm\<versão>\`
 - Downloads: `%LOCALAPPDATA%\AniShade\cache\downloads\`
 - Backups: `%LOCALAPPDATA%\AniShade\backups\<jogo>\`
 - Logs: `%LOCALAPPDATA%\AniShade\logs\anishade.log` e `ReShade.log` na pasta do jogo

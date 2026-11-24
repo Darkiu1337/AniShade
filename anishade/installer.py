@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import anime4k, detect, nwjs, paths, pe, reshade, rpgmaker, winapi
+from . import anime4k, detect, nwjs, paths, pe, renpy, reshade, rpgmaker, winapi
 from .store import Game, Store
 
 PRESET_HEADER = ""
@@ -45,6 +45,8 @@ class InstallOptions:
     rpgmaker_hide_textbox: bool = True
     rpgmaker_no_alt_skip: bool = True
     rpgmaker_save_slots_100: bool = True
+    renpy_urm: bool = False
+    urm_version: str = ""
     hide_splash: bool = True
 
 
@@ -62,6 +64,8 @@ class InstallReport:
     launcher: str = ""
     rpgmaker_plugin: str = ""
     rpgmaker_plugins: list[str] = field(default_factory=list)
+    renpy_urm: str = ""
+    renpy_urm_version: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +149,42 @@ def _extract_manifest_plugins(manifest: dict, identifier: str) -> dict:
 def is_rpgmaker_plugin_active(game_dir: Path, plugin_key: str = "hide_textbox") -> bool:
     """True when the specified managed RPG Maker plugin is present and enabled."""
     return rpgmaker.is_plugin_active(game_dir, plugin_key=plugin_key)
+
+
+def renpy_meta_path(identifier: str) -> Path:
+    return paths.GAME_DATA_DIR / f"{identifier}.renpy.json"
+
+
+def load_renpy_meta(identifier: str) -> dict:
+    """Load per-game Ren'Py Universal Ren'Py Mod metadata."""
+    try:
+        raw = json.loads(renpy_meta_path(identifier).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def save_renpy_meta(identifier: str, data: dict) -> None:
+    if not data or not data.get("rpa_path"):
+        renpy_meta_path(identifier).unlink(missing_ok=True)
+        return
+    paths.GAME_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    renpy_meta_path(identifier).write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _extract_manifest_renpy_urm(manifest: dict, identifier: str) -> dict:
+    stored = load_renpy_meta(identifier)
+    if stored.get("rpa_path"):
+        return stored
+    raw = manifest.get("renpy_urm_meta")
+    if isinstance(raw, dict) and raw.get("rpa_path"):
+        return raw
+    return {}
+
+
+def is_renpy_urm_active(game_dir: Path) -> bool:
+    """True when 0x52_URM.rpa is currently present in the game's Ren'Py game/ folder."""
+    return renpy.is_urm_active(game_dir)
 
 
 def _rel(path: Path, base: Path) -> str:
@@ -525,6 +565,56 @@ def install(
     hide_meta = active_plugins.get("hide_textbox") or {}
     rpgmaker_plugin_path = str(hide_meta.get("plugin_path") or "")
 
+    # 7. Ren'Py Universal Ren'Py Mod (0x52_URM.rpa)
+    prev_urm = _extract_manifest_renpy_urm(previous_manifest, game.id)
+    want_urm = bool(options.renpy_urm and renpy.is_supported_engine(analysis.engine.key))
+    active_urm: dict = {}
+    renpy_urm_path = ""
+    renpy_urm_version = ""
+    if want_urm:
+        try:
+            urm_release = renpy.ensure_release(
+                options.urm_version or None,
+                progress=progress,
+                status=log,
+            )
+            rpa_source = renpy.verified_rpa(urm_release)
+            urm_result = renpy.install_urm(
+                game_dir,
+                rpa_source,
+                version=urm_release.version,
+                write_fn=_safe_write,
+                backup_fn=lambda src, label: _backup(game.id, src, label),
+                existing_meta=prev_urm,
+            )
+            if urm_result.installed:
+                active_urm = urm_result.to_manifest()
+                renpy_urm_path = urm_result.rpa_path
+                renpy_urm_version = urm_result.version
+                if urm_result.backup_path and urm_result.backup_path != prev_urm.get("backup_path"):
+                    backups.append(urm_result.backup_path)
+                log(f"Universal Ren'Py Mod {urm_result.version} instalado em {urm_result.rpa_path}.")
+            elif urm_result.warning:
+                warnings.append(urm_result.warning)
+                log(f"Aviso: {urm_result.warning}")
+        except renpy.RenpyModError as exc:
+            warnings.append(f"Nao foi possivel instalar o Universal Ren'Py Mod: {exc}")
+            log(f"Aviso: falha ao instalar Universal Ren'Py Mod ({exc}).")
+            if prev_urm and renpy.is_urm_active(game_dir):
+                active_urm = dict(prev_urm)
+                renpy_urm_path = str(active_urm.get("rpa_path") or "")
+                renpy_urm_version = str(active_urm.get("version") or "")
+    elif prev_urm:
+        removed_urm = renpy.uninstall_urm(
+            game_dir,
+            prev_urm,
+            backup_fn=lambda src, label: _backup(game.id, src, label),
+            log=log,
+        )
+        if removed_urm:
+            log(f"Universal Ren'Py Mod removido: {', '.join(removed_urm)}.")
+    save_renpy_meta(game.id, active_urm)
+
     manifest = {
         "game_id": game.id,
         "exe": str(exe),
@@ -550,6 +640,8 @@ def install(
         "rpgmaker_save_slots_100": "save_slots_100" in active_plugins,
         "rpgmaker_plugin": hide_meta,
         "rpgmaker_plugins": active_plugins,
+        "renpy_urm": bool(active_urm),
+        "renpy_urm_meta": active_urm,
     }
     save_manifest(game.id, manifest)
 
@@ -566,6 +658,7 @@ def install(
     game.rpgmaker_hide_textbox = options.rpgmaker_hide_textbox
     game.rpgmaker_no_alt_skip = options.rpgmaker_no_alt_skip
     game.rpgmaker_save_slots_100 = options.rpgmaker_save_slots_100
+    game.renpy_urm = options.renpy_urm
     store.save_games()
 
     log("Instalacao concluida.")
@@ -582,6 +675,8 @@ def install(
         launcher=launcher,
         rpgmaker_plugin=rpgmaker_plugin_path,
         rpgmaker_plugins=installed_plugin_paths,
+        renpy_urm=renpy_urm_path,
+        renpy_urm_version=renpy_urm_version,
     )
 
 
@@ -683,6 +778,18 @@ def uninstall(store: Store, game: Game, status=None) -> list[str]:
                 shared_sha = winapi.sha256_file(game_dir / first_pjs_rel)
         plugin_meta_path(game.id).unlink(missing_ok=True)
 
+    urm_meta = _extract_manifest_renpy_urm(manifest, game.id)
+    if urm_meta:
+        removed.extend(
+            renpy.uninstall_urm(
+                game_dir,
+                urm_meta,
+                backup_fn=lambda src, label: _backup(game.id, src, label),
+                log=log,
+            )
+        )
+        renpy_meta_path(game.id).unlink(missing_ok=True)
+
     for name in (anime4k.PRESET_NAME, "AniShade-Iniciar.bat"):
         leftover = game_dir / name
         if leftover.is_file():
@@ -706,9 +813,11 @@ class InstallState:
     preset_ok: bool = False
     shaders_ok: bool = False
     plugin_ok: bool = True
+    urm_ok: bool = True
     dll_name: str = ""
     reshade_version: str = ""
     rpgmaker_plugin: str = ""
+    renpy_urm: str = ""
     techniques: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
 
@@ -755,6 +864,13 @@ def inspect(game: Game) -> InstallState:
             all_ok = all_ok and ok
             state.problems.extend(plugin_problems)
         state.plugin_ok = all_ok
+
+    urm_meta = _extract_manifest_renpy_urm(manifest, game.id)
+    if urm_meta:
+        state.renpy_urm = str(urm_meta.get("rpa_path") or "")
+        urm_ok, urm_problems = renpy.inspect_urm(game_dir, urm_meta)
+        state.urm_ok = urm_ok
+        state.problems.extend(urm_problems)
 
     try:
         text = preset_path.read_text(encoding="utf-8", errors="ignore")
@@ -908,6 +1024,81 @@ def set_rpgmaker_hide_textbox(
 ) -> str:
     """Immediately add or remove the RPG Maker MV/MZ hide-textbox plugin (H key)."""
     return set_rpgmaker_plugin(store, game, "hide_textbox", enabled, status=status)
+
+
+def set_renpy_urm(
+    store: Store,
+    game: Game,
+    enabled: bool,
+    preferred_version: str = "",
+    status=None,
+    progress=None,
+) -> str:
+    """Immediately install or remove Universal Ren'Py Mod (0x52_URM.rpa) in a Ren'Py game."""
+    def log(message: str) -> None:
+        if status:
+            status(message)
+
+    exe = game.exe_path
+    if not exe.is_file():
+        raise InstallError(f"Executavel nao encontrado: {exe}")
+    if winapi.process_running(exe.name):
+        raise GameRunningError(
+            f"{exe.name} esta em execucao. Feche o jogo antes de alterar o Universal Ren'Py Mod."
+        )
+
+    game_dir = exe.parent
+    manifest = load_manifest(game.id)
+    prev_urm = _extract_manifest_renpy_urm(manifest, game.id)
+
+    if enabled:
+        if renpy.find_game_dir(game_dir) is None:
+            raise InstallError("Pasta 'game/' do Ren'Py nao encontrada ao lado do executavel.")
+        release = renpy.ensure_release(
+            preferred_version or None,
+            progress=progress,
+            status=log,
+        )
+        rpa_source = renpy.verified_rpa(release)
+        result = renpy.install_urm(
+            game_dir,
+            rpa_source,
+            version=release.version,
+            write_fn=_safe_write,
+            backup_fn=lambda src, label: _backup(game.id, src, label),
+            existing_meta=prev_urm,
+        )
+        if not result.installed:
+            raise InstallError(result.warning or "Pasta 'game/' do Ren'Py nao encontrada.")
+        meta = result.to_manifest()
+        save_renpy_meta(game.id, meta)
+        if manifest:
+            manifest["renpy_urm"] = True
+            manifest["renpy_urm_meta"] = meta
+            save_manifest(game.id, manifest)
+        game.renpy_urm = True
+        store.save_games()
+        log(f"Universal Ren'Py Mod {result.version} ativado em {result.rpa_path}.")
+        return result.rpa_path
+
+    removed = renpy.uninstall_urm(
+        game_dir,
+        prev_urm,
+        backup_fn=lambda src, label: _backup(game.id, src, label),
+        log=log,
+    )
+    save_renpy_meta(game.id, {})
+    if manifest:
+        manifest["renpy_urm"] = False
+        manifest["renpy_urm_meta"] = {}
+        save_manifest(game.id, manifest)
+    game.renpy_urm = False
+    store.save_games()
+    if removed:
+        log(f"Universal Ren'Py Mod removido ({', '.join(removed)}).")
+    else:
+        log("Universal Ren'Py Mod desativado.")
+    return ""
 
 
 def realign_reshade_bits(store: Store, game: Game, status=None) -> bool:

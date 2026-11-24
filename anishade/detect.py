@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import engines, nwjs, rpgmaker, winapi
+from . import engines, nwjs, renpy, rpgmaker, winapi
 from .pe import PEError, PEInfo, executable_strings, guess_api, read_pe
 
 API_DLL = {
@@ -91,6 +91,7 @@ class GameAnalysis:
     content_size: tuple[int, int] | None = None
     rpgmaker_plugins_js: str = ""
     nwjs_version: str = ""
+    renpy_game_dir: str = ""
 
     @property
     def is_64bit(self) -> bool:
@@ -368,6 +369,14 @@ def analyze(exe: str | Path, api_override: str | None = None, engine_override: s
             analysis.notes.append(
                 f"Plugin {rpgmaker.PLUGIN_NAME} (tecla H para ocultar caixa de texto) disponível em {analysis.rpgmaker_plugins_js}."
             )
+
+    if renpy.is_supported_engine(engine.key):
+        renpy_dir = renpy.find_game_dir(game_dir)
+        if renpy_dir is not None:
+            try:
+                analysis.renpy_game_dir = renpy_dir.relative_to(game_dir).as_posix()
+            except ValueError:
+                analysis.renpy_game_dir = str(renpy_dir)
 
     pe_api = guess_api(analysis.pe) if analysis.pe else None
     log_api = _api_from_log(game_dir)

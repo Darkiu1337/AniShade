@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import anime4k, nwjs, paths, reshade, winapi
+from .. import anime4k, nwjs, paths, renpy, reshade, winapi
 from ..store import Store
 from .theme import MUTED
 from .widgets import Card, Divider
@@ -50,6 +50,7 @@ class SettingsDialog(QDialog):
         body.setSpacing(12)
         body.addWidget(self._build_reshade_card())
         body.addWidget(self._build_nwjs_card())
+        body.addWidget(self._build_urm_card())
         body.addWidget(self._build_defaults_card())
         body.addWidget(self._build_about())
         body.addStretch(1)
@@ -66,6 +67,7 @@ class SettingsDialog(QDialog):
 
         self._refresh_cache_info()
         self._refresh_nwjs_cache_info()
+        self._refresh_urm_cache_info()
 
     # -- cards -----------------------------------------------------------
     def _build_reshade_card(self) -> Card:
@@ -160,6 +162,52 @@ class SettingsDialog(QDialog):
         card.add(self.nwjs_progress)
         return card
 
+    def _build_urm_card(self) -> Card:
+        card = Card("Universal Ren'Py Mod (Ren'Py)")
+        self.urm_cache_label = QLabel()
+        self.urm_cache_label.setObjectName("muted")
+        self.urm_cache_label.setWordWrap(True)
+        card.add(self.urm_cache_label)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        label = QLabel("Versão usada")
+        label.setObjectName("muted")
+        self.urm_version_combo = QComboBox()
+        self.urm_version_combo.setMinimumWidth(260)
+        row.addWidget(label)
+        row.addWidget(self.urm_version_combo, 1)
+        card.add_layout(row)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+        self.urm_download_button = QPushButton("Baixar / atualizar agora")
+        self.urm_download_button.setObjectName("primary")
+        self.urm_download_button.clicked.connect(self._download_urm)
+        self.urm_prune_button = QPushButton("Remover versões antigas")
+        self.urm_prune_button.clicked.connect(self._prune_urm)
+        self.urm_open_cache_button = QPushButton("Abrir pasta de cache")
+        self.urm_open_cache_button.setObjectName("ghost")
+        self.urm_open_cache_button.clicked.connect(lambda: winapi.open_folder(paths.URM_CACHE_DIR))
+        actions.addWidget(self.urm_download_button)
+        actions.addWidget(self.urm_prune_button)
+        actions.addStretch(1)
+        actions.addWidget(self.urm_open_cache_button)
+        card.add_layout(actions)
+
+        self.urm_status = QLabel("")
+        self.urm_status.setObjectName("muted")
+        self.urm_status.setWordWrap(True)
+        self.urm_status.hide()
+        card.add(self.urm_status)
+
+        self.urm_progress = QProgressBar()
+        self.urm_progress.setRange(0, 100)
+        self.urm_progress.setValue(0)
+        self.urm_progress.hide()
+        card.add(self.urm_progress)
+        return card
+
     def _build_defaults_card(self) -> Card:
         card = Card("Padrões para novos jogos")
         row = QHBoxLayout()
@@ -210,6 +258,12 @@ class SettingsDialog(QDialog):
         self.rpgmaker_save_slots_check.setChecked(self.settings.rpgmaker_save_slots_100)
         card.add(self.rpgmaker_save_slots_check)
 
+        self.renpy_urm_check = QCheckBox(
+            "Instalar Universal Ren'Py Mod (0x52_URM.rpa) em novos jogos Ren'Py"
+        )
+        self.renpy_urm_check.setChecked(self.settings.renpy_urm)
+        card.add(self.renpy_urm_check)
+
         divider = Divider()
         card.add(divider)
 
@@ -229,8 +283,9 @@ class SettingsDialog(QDialog):
     def _build_about(self) -> QLabel:
         label = QLabel(
             "AniShade não redistribui binários. O ReShade é baixado de reshade.me, "
-            "o NW.js é baixado do servidor oficial (dl.nwjs.io) e reutilizado em todos os jogos, "
-            "e os shaders Anime4K (bloc97/Anime4K, MIT) acompanham o aplicativo.\n"
+            "o NW.js é baixado de dl.nwjs.io, o Universal Ren'Py Mod é baixado de 0x52.dev "
+            "(todos reutilizados via cache local), e os shaders Anime4K (bloc97/Anime4K, MIT) "
+            "acompanham o aplicativo.\n"
             "Pressione Home no jogo para abrir o overlay do ReShade e ajustar o preset."
         )
         label.setObjectName("muted")
@@ -242,6 +297,7 @@ class SettingsDialog(QDialog):
     def _set_downloading(self, busy: bool) -> None:
         self.download_button.setEnabled(not busy)
         self.nwjs_download_button.setEnabled(not busy)
+        self.urm_download_button.setEnabled(not busy)
 
     def _refresh_cache_info(self) -> None:
         cached = reshade.list_cached()
@@ -306,6 +362,39 @@ class SettingsDialog(QDialog):
                 self.nwjs_version_combo.setCurrentIndex(index)
         self.nwjs_version_combo.blockSignals(False)
         self.nwjs_prune_button.setEnabled(len(cached) > 1)
+
+    def _refresh_urm_cache_info(self) -> None:
+        cached = renpy.list_cached()
+        if cached:
+            versions = ", ".join(item.version for item in cached)
+            self.urm_cache_label.setText(
+                f"Versões no cache local: {versions}.\nPasta: {paths.URM_CACHE_DIR}"
+            )
+        else:
+            self.urm_cache_label.setText(
+                "Nenhuma versão do Universal Ren'Py Mod baixada ainda. Ele será obtido em 0x52.dev "
+                "uma única vez ao ativar o interruptor em um jogo Ren'Py."
+            )
+
+        current = self.urm_version_combo.currentData()
+        self.urm_version_combo.blockSignals(True)
+        self.urm_version_combo.clear()
+        self.urm_version_combo.addItem("Mais recente estável (baixa se necessário)", "")
+        for item in cached:
+            label = f"{item.version} (em cache)"
+            if self.settings.urm_version == item.version:
+                label += " — preferida"
+            self.urm_version_combo.addItem(label, item.version)
+        if current:
+            index = self.urm_version_combo.findData(current)
+            if index >= 0:
+                self.urm_version_combo.setCurrentIndex(index)
+        elif self.settings.urm_version:
+            index = self.urm_version_combo.findData(self.settings.urm_version)
+            if index >= 0:
+                self.urm_version_combo.setCurrentIndex(index)
+        self.urm_version_combo.blockSignals(False)
+        self.urm_prune_button.setEnabled(len(cached) > 1)
 
     def _download(self) -> None:
         if self.task is not None:
@@ -396,6 +485,59 @@ class SettingsDialog(QDialog):
 
         self.task = run_task(body, lambda text: self.nwjs_status.setText(text), on_progress, on_result, on_error)
 
+    def _download_urm(self) -> None:
+        if self.task is not None:
+            return
+        self._set_downloading(True)
+        self.urm_progress.show()
+        self.urm_progress.setValue(0)
+        self.urm_status.show()
+
+        def body(log, progress):
+            release = renpy.fetch_latest_release()
+            cached = renpy.list_cached()
+            for item in cached:
+                if item.version == release.version:
+                    log(f"Universal Ren'Py Mod {item.version} ja e a versao estavel mais recente em cache.")
+                    return item
+            archive = renpy.download_archive(release, progress=progress, status=log)
+            return renpy.cache_from_archive(archive, release)
+
+        def on_progress(done: int, total: int) -> None:
+            if total > 0:
+                self.urm_progress.setRange(0, 100)
+                self.urm_progress.setValue(int(done * 100 / total))
+                self.urm_status.setText(
+                    f"Baixando URM... {done / 1048576:.1f} / {total / 1048576:.1f} MB"
+                )
+            else:
+                self.urm_progress.setRange(0, 0)
+
+        def on_result(cached_build) -> None:
+            self.task = None
+            self.urm_progress.setRange(0, 100)
+            self.urm_progress.setValue(100)
+            self._set_downloading(False)
+            self.urm_status.setText(f"Universal Ren'Py Mod {cached_build.version} pronto no cache.")
+            self._refresh_urm_cache_info()
+
+        def on_error(message: str, trace: str, error: object | None = None) -> None:
+            self.task = None
+            self.urm_progress.hide()
+            self._set_downloading(False)
+            self.urm_status.setText(f"Falha: {message}")
+            box = QMessageBox(
+                QMessageBox.Critical,
+                "Falha no download do Universal Ren'Py Mod",
+                message,
+                QMessageBox.Ok,
+                self,
+            )
+            box.setDetailedText(trace)
+            box.exec()
+
+        self.task = run_task(body, lambda text: self.urm_status.setText(text), on_progress, on_result, on_error)
+
     def _prune(self) -> None:
         removed = reshade.prune_cache(keep=1)
         self._refresh_cache_info()
@@ -410,15 +552,24 @@ class SettingsDialog(QDialog):
             self.nwjs_status.show()
             self.nwjs_status.setText("Removidas: " + ", ".join(removed))
 
+    def _prune_urm(self) -> None:
+        removed = renpy.prune_cache(keep=1)
+        self._refresh_urm_cache_info()
+        if removed:
+            self.urm_status.show()
+            self.urm_status.setText("Removidas: " + ", ".join(removed))
+
     def _save(self) -> None:
         self.settings.reshade_version = self.version_combo.currentData() or ""
         self.settings.nwjs_version = self.nwjs_version_combo.currentData() or ""
+        self.settings.urm_version = self.urm_version_combo.currentData() or ""
         self.settings.default_variant = self.variant_combo.currentData()
         self.settings.default_top_margin = int(self.margin_spin.value())
         self.settings.create_launcher = self.launcher_check.isChecked()
         self.settings.rpgmaker_hide_textbox = self.rpgmaker_plugin_check.isChecked()
         self.settings.rpgmaker_no_alt_skip = self.rpgmaker_no_alt_check.isChecked()
         self.settings.rpgmaker_save_slots_100 = self.rpgmaker_save_slots_check.isChecked()
+        self.settings.renpy_urm = self.renpy_urm_check.isChecked()
         self.store.save_settings()
         self.accept()
 

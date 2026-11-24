@@ -6,8 +6,8 @@ import sys
 import time
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QIcon, QKeySequence, QShortcut
+from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtGui import QDesktopServices, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -35,7 +35,19 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import APP_NAME, __version__, anime4k, detect, engines, installer, nwjs, reshade, rpgmaker, winapi
+from .. import (
+    APP_NAME,
+    __version__,
+    anime4k,
+    detect,
+    engines,
+    installer,
+    nwjs,
+    renpy,
+    reshade,
+    rpgmaker,
+    winapi,
+)
 from ..store import Game, Store, game_id_for
 from .delegates import (
     ROLE_COST,
@@ -235,6 +247,9 @@ class MainWindow(QMainWindow):
         self.rpgmaker_card = self._build_rpgmaker_card()
         self.rpgmaker_card.hide()
         content_layout.addWidget(self.rpgmaker_card)
+        self.renpy_card = self._build_renpy_card()
+        self.renpy_card.hide()
+        content_layout.addWidget(self.renpy_card)
         content_layout.addWidget(self._build_shader_card())
         content_layout.addWidget(self._build_install_card())
         content_layout.addStretch(1)
@@ -464,6 +479,38 @@ class MainWindow(QMainWindow):
         card.add_layout(nwjs_row)
         return card
 
+    def _build_renpy_card(self) -> Card:
+        card = Card("Ren'Py")
+        mod_link = QPushButton("0x52.dev")
+        mod_link.setObjectName("chip")
+        mod_link.setToolTip(f"Abrir página oficial: {renpy.MOD_PAGE_URL}")
+        mod_link.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(renpy.MOD_PAGE_URL)))
+        card.add_header_widget(mod_link)
+
+        urm_row = QHBoxLayout()
+        urm_row.setSpacing(12)
+        urm_text = QVBoxLayout()
+        urm_text.setSpacing(2)
+        urm_title = QLabel("Universal Ren'Py Mod (URM)")
+        urm_title.setStyleSheet("font-weight: 600;")
+        self.renpy_urm_status = QLabel("—")
+        self.renpy_urm_status.setObjectName("muted")
+        self.renpy_urm_status.setWordWrap(True)
+        self.renpy_urm_status.setStyleSheet("font-size: 8.6pt;")
+        urm_text.addWidget(urm_title)
+        urm_text.addWidget(self.renpy_urm_status)
+        urm_row.addLayout(urm_text, 1)
+
+        self.renpy_urm_toggle = ToggleSwitch()
+        self.renpy_urm_toggle.setToolTip(
+            "Baixa o Universal Ren'Py Mod (0x52_URM.rpa) de 0x52.dev uma única vez, "
+            "salva em cache e instala ou remove na pasta game/ imediatamente."
+        )
+        self.renpy_urm_toggle.toggled.connect(self._on_renpy_urm_toggled)
+        urm_row.addWidget(self.renpy_urm_toggle, 0, Qt.AlignVCenter)
+        card.add_layout(urm_row)
+        return card
+
     def _build_shader_card(self) -> Card:
         card = Card("Shaders Anime4K (Restore)")
         intro = QLabel(
@@ -566,6 +613,8 @@ class MainWindow(QMainWindow):
         self.preset_value = ElidedLabel("—")
         self.rpgmaker_plugin_label = self._label("Plugin RPG Maker")
         self.rpgmaker_plugin_value = QLabel("—")
+        self.renpy_urm_label = self._label("Mod Ren'Py")
+        self.renpy_urm_value = QLabel("—")
 
         self.dll_combo = QComboBox()
         self.dll_combo.setToolTip(
@@ -595,6 +644,10 @@ class MainWindow(QMainWindow):
         grid.addWidget(self.rpgmaker_plugin_value, 5, 1)
         self.rpgmaker_plugin_label.hide()
         self.rpgmaker_plugin_value.hide()
+        grid.addWidget(self.renpy_urm_label, 6, 0)
+        grid.addWidget(self.renpy_urm_value, 6, 1)
+        self.renpy_urm_label.hide()
+        self.renpy_urm_value.hide()
         card.add_layout(grid)
 
         self.problems_label = QLabel("")
@@ -729,6 +782,11 @@ class MainWindow(QMainWindow):
                     or bool((manifest.get("rpgmaker_plugins") or {}).get("save_slots_100"))
                     != bool(game.rpgmaker_save_slots_100)
                 )
+            )
+            or (
+                renpy.is_supported_engine(game.engine_key)
+                and renpy.find_game_dir(game.game_dir) is not None
+                and bool(manifest.get("renpy_urm")) != bool(game.renpy_urm)
             )
         ):
             return "Pendente", "warn"
@@ -880,6 +938,11 @@ class MainWindow(QMainWindow):
             self.rpgmaker_plugin_label.setVisible(is_rpgm)
             self.rpgmaker_plugin_value.setVisible(is_rpgm)
             self._refresh_rpgmaker_card()
+            is_renpy = renpy.is_supported_engine(analysis.engine.key)
+            self.renpy_card.setVisible(is_renpy)
+            self.renpy_urm_label.setVisible(is_renpy)
+            self.renpy_urm_value.setVisible(is_renpy)
+            self._refresh_renpy_card()
             self._refresh_install_card()
             self._update_footer()
         finally:
@@ -976,6 +1039,49 @@ class MainWindow(QMainWindow):
         self._update_footer()
         self._refresh_games(select_id=game.id)
 
+    def _on_renpy_urm_toggled(self, checked: bool) -> None:
+        if self._loading or self.current_game is None or self.task is not None:
+            return
+        game = self.current_game
+        preferred = self.store.settings.urm_version
+
+        def body(log, progress):
+            return installer.set_renpy_urm(
+                self.store,
+                game,
+                checked,
+                preferred_version=preferred,
+                status=log,
+                progress=progress,
+            )
+
+        def on_progress(done: int, total: int) -> None:
+            if total > 0:
+                self.progress.setRange(0, 100)
+                self.progress.setValue(int(done * 100 / total))
+                self.footer_status.setText(
+                    f"Baixando Universal Ren'Py Mod... {done / 1048576:.1f} / {total / 1048576:.1f} MB"
+                )
+            else:
+                self.progress.setRange(0, 0)
+
+        def on_result(_result) -> None:
+            self._set_busy(False)
+            self._refresh_renpy_card()
+            self._refresh_install_card()
+            self._update_footer()
+            self._refresh_games(select_id=game.id)
+
+        def on_error(message: str, trace: str, error: object | None = None) -> None:
+            self.renpy_urm_toggle.blockSignals(True)
+            self.renpy_urm_toggle.setChecked(not checked)
+            self.renpy_urm_toggle.blockSignals(False)
+            self._on_task_error(message, trace, error)
+
+        verb = "Instalando Universal Ren'Py Mod..." if checked else "Removendo Universal Ren'Py Mod..."
+        self._set_busy(True, verb)
+        self.task = run_task(body, self._log, on_progress, on_result, on_error)
+
     def _on_engine_override(self, _index: int) -> None:
         if self._loading or self.current_game is None:
             return
@@ -1021,6 +1127,10 @@ class MainWindow(QMainWindow):
             rpgmaker_save_slots_100=(
                 bool(self.current_game.rpgmaker_save_slots_100) if self.current_game else True
             ),
+            renpy_urm=(
+                bool(self.current_game.renpy_urm) if self.current_game else False
+            ),
+            urm_version=self.store.settings.urm_version,
         )
 
     def _refresh_rpgmaker_card(self) -> None:
@@ -1120,6 +1230,49 @@ class MainWindow(QMainWindow):
         self.nwjs_update_button.setEnabled(game.exe_path.is_file() and self.task is None)
         self.nwjs_restore_button.setEnabled(game.exe_path.is_file() and self.task is None)
 
+    def _refresh_renpy_card(self) -> None:
+        game = self.current_game
+        analysis = self.analysis
+        if game is None or analysis is None or not renpy.is_supported_engine(analysis.engine.key):
+            return
+
+        has_game_dir = bool(analysis.renpy_game_dir)
+        can_toggle = has_game_dir and game.exe_path.is_file() and self.task is None
+        urm_active = installer.is_renpy_urm_active(game.game_dir) if has_game_dir else False
+
+        self.renpy_urm_toggle.blockSignals(True)
+        self.renpy_urm_toggle.setEnabled(can_toggle)
+        self.renpy_urm_toggle.setChecked(urm_active)
+        self.renpy_urm_toggle.blockSignals(False)
+
+        cached = renpy.newest_cached()
+        if not has_game_dir:
+            self.renpy_urm_status.setText(
+                "Pasta game/ não encontrada ao lado do executável."
+            )
+        elif urm_active:
+            meta = installer.load_renpy_meta(game.id)
+            version = str(meta.get("version") or "")
+            ver_tag = f"v{version} · " if version else ""
+            self.renpy_urm_status.setText(
+                f"Ativo ({ver_tag}{analysis.renpy_game_dir}/{renpy.URM_FILENAME}). "
+                "Menu de variáveis, cenas, escolhas, saves e customização dentro do jogo."
+            )
+        elif game.renpy_urm:
+            self.renpy_urm_status.setText(
+                "Não instalado ainda — ative o interruptor agora ou ele será instalado junto com o ReShade."
+            )
+        elif cached:
+            self.renpy_urm_status.setText(
+                f"Desativado — ative para instalar {renpy.URM_FILENAME} em {analysis.renpy_game_dir}/ "
+                f"(cache local: v{cached.version})."
+            )
+        else:
+            self.renpy_urm_status.setText(
+                f"Desativado — baixa {renpy.URM_FILENAME} de 0x52.dev uma única vez, salva em cache "
+                f"e instala em {analysis.renpy_game_dir}/."
+            )
+
     # ------------------------------------------------------------------
     # status / install
     # ------------------------------------------------------------------
@@ -1176,6 +1329,20 @@ class MainWindow(QMainWindow):
             else:
                 self.rpgmaker_plugin_value.setText("plugins.js não encontrado")
 
+        if self.analysis and renpy.is_supported_engine(self.analysis.engine.key):
+            if installer.is_renpy_urm_active(game.game_dir):
+                meta = installer.load_renpy_meta(game.id)
+                ver = str(meta.get("version") or "")
+                suffix = f" v{ver}" if ver else ""
+                self.renpy_urm_value.setText(f"Universal Ren'Py Mod{suffix} ({renpy.URM_FILENAME})")
+            elif self.analysis.renpy_game_dir:
+                if game.renpy_urm:
+                    self.renpy_urm_value.setText("será instalado com o ReShade")
+                else:
+                    self.renpy_urm_value.setText("desativado")
+            else:
+                self.renpy_urm_value.setText("pasta game/ não encontrada")
+
     def _update_footer(self) -> None:
         game = self.current_game
         analysis = self.analysis
@@ -1212,6 +1379,11 @@ class MainWindow(QMainWindow):
                         or bool((manifest.get("rpgmaker_plugins") or {}).get("save_slots_100"))
                         != bool(game.rpgmaker_save_slots_100)
                     )
+                )
+                or (
+                    renpy.is_supported_engine(analysis.engine.key)
+                    and bool(analysis.renpy_game_dir)
+                    and bool(manifest.get("renpy_urm")) != bool(game.renpy_urm)
                 )
             )
 
@@ -1253,6 +1425,9 @@ class MainWindow(QMainWindow):
         self.rpgmaker_save_slots_toggle.setEnabled(
             not busy and bool(self.analysis and self.analysis.rpgmaker_plugins_js)
         )
+        self.renpy_urm_toggle.setEnabled(
+            not busy and bool(self.analysis and self.analysis.renpy_game_dir)
+        )
         self.nwjs_update_button.setEnabled(not busy)
         self.nwjs_restore_button.setEnabled(not busy)
         if busy:
@@ -1266,6 +1441,7 @@ class MainWindow(QMainWindow):
             self.progress.setRange(0, 100)
             self.progress.setValue(0)
             self._refresh_rpgmaker_card()
+            self._refresh_renpy_card()
             self._update_footer()
 
     def _start_install(self) -> None:
@@ -1298,6 +1474,7 @@ class MainWindow(QMainWindow):
             )
             self._refresh_games(select_id=game.id)
             self._refresh_rpgmaker_card()
+            self._refresh_renpy_card()
             self._refresh_install_card()
             self._update_footer()
             self._show_success(report)
@@ -1317,6 +1494,11 @@ class MainWindow(QMainWindow):
                 plugin_lines.append(f"• Plugin RPG Maker: {fname} (100 slots de save)\n")
             else:
                 plugin_lines.append(f"• Plugin RPG Maker: {fname}\n")
+        if report.renpy_urm:
+            ver_suffix = f" v{report.renpy_urm_version}" if report.renpy_urm_version else ""
+            plugin_lines.append(
+                f"• Mod Ren'Py: Universal Ren'Py Mod{ver_suffix} ({Path(report.renpy_urm).name})\n"
+            )
         plugin_line = "".join(plugin_lines)
         extra = ""
         if report.launcher:
@@ -1356,6 +1538,7 @@ class MainWindow(QMainWindow):
             self._log(f"ReShade removido ({len(removed)} arquivos).")
             self._refresh_games(select_id=game.id)
             self._refresh_rpgmaker_card()
+            self._refresh_renpy_card()
             self._refresh_install_card()
             self._update_footer()
 
@@ -1535,6 +1718,7 @@ class MainWindow(QMainWindow):
             rpgmaker_hide_textbox=self.store.settings.rpgmaker_hide_textbox,
             rpgmaker_no_alt_skip=self.store.settings.rpgmaker_no_alt_skip,
             rpgmaker_save_slots_100=self.store.settings.rpgmaker_save_slots_100,
+            renpy_urm=self.store.settings.renpy_urm,
             detected={
                 "evidence": analysis.engine_evidence,
                 "warnings": analysis.warnings,

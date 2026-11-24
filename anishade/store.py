@@ -58,6 +58,7 @@ class Game:
     rpgmaker_hide_textbox: bool = True
     rpgmaker_no_alt_skip: bool = True
     rpgmaker_save_slots_100: bool = True
+    renpy_urm: bool = False
     nwjs_version: str = ""
     user_notes: str = ""
     detected: dict = field(default_factory=dict)
@@ -87,6 +88,7 @@ class Settings:
         data = data or {}
         self.reshade_version: str = data.get("reshade_version", "")
         self.nwjs_version: str = data.get("nwjs_version", "")
+        self.urm_version: str = data.get("urm_version", "")
         self.auto_check_reshade: bool = bool(data.get("auto_check_reshade", True))
         self.default_variant: str = data.get("default_variant", anime4k.DEFAULT_VARIANT)
         self.default_top_margin: int = int(data.get("default_top_margin", 0))
@@ -94,6 +96,7 @@ class Settings:
         self.rpgmaker_hide_textbox: bool = bool(data.get("rpgmaker_hide_textbox", True))
         self.rpgmaker_no_alt_skip: bool = bool(data.get("rpgmaker_no_alt_skip", True))
         self.rpgmaker_save_slots_100: bool = bool(data.get("rpgmaker_save_slots_100", True))
+        self.renpy_urm: bool = bool(data.get("renpy_urm", False))
         self.theme: str = data.get("theme", "dark")
         self.last_dir: str = data.get("last_dir", "")
         self.confirm_before_overwrite: bool = bool(data.get("confirm_before_overwrite", True))

@@ -21,6 +21,7 @@ CACHE_DIR = DATA_DIR / "cache"
 DOWNLOAD_DIR = CACHE_DIR / "downloads"
 RESHADE_CACHE_DIR = CACHE_DIR / "reshade"
 NWJS_CACHE_DIR = CACHE_DIR / "nwjs"
+URM_CACHE_DIR = CACHE_DIR / "urm"
 GAME_DATA_DIR = DATA_DIR / "games"
 BACKUP_DIR = DATA_DIR / "backups"
 LOG_DIR = DATA_DIR / "logs"
@@ -35,6 +36,7 @@ def ensure_dirs() -> None:
         DOWNLOAD_DIR,
         RESHADE_CACHE_DIR,
         NWJS_CACHE_DIR,
+        URM_CACHE_DIR,
         GAME_DATA_DIR,
         BACKUP_DIR,
         LOG_DIR,

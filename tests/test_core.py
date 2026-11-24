@@ -17,7 +17,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from anishade import anime4k, detect, engines, installer, nwjs, paths, pe, reshade, rpgmaker  # noqa: E402
+from anishade import anime4k, detect, engines, installer, nwjs, paths, pe, renpy, reshade, rpgmaker  # noqa: E402
 from anishade.installer import InstallOptions  # noqa: E402
 from anishade.store import Game, game_id_for  # noqa: E402
 
@@ -1039,6 +1039,129 @@ class NwjsUpdaterTests(unittest.TestCase):
         self.assertFalse(shim_res.isError(), shim_res.toString())
         filename = engine.evaluate("process.mainModule && process.mainModule.filename").toString()
         self.assertEqual(filename, "C:/Games/MyMV/www/index.html")
+
+
+class RenpyUrmTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        for patch in (
+            mock.patch.object(paths, "DATA_DIR", self.base / "data"),
+            mock.patch.object(paths, "CACHE_DIR", self.base / "data" / "cache"),
+            mock.patch.object(paths, "DOWNLOAD_DIR", self.base / "data" / "cache" / "downloads"),
+            mock.patch.object(paths, "URM_CACHE_DIR", self.base / "data" / "cache" / "urm"),
+            mock.patch.object(paths, "GAME_DATA_DIR", self.base / "data" / "games"),
+            mock.patch.object(paths, "BACKUP_DIR", self.base / "data" / "backups"),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def _make_fake_urm_zip(self, version: str = "2.6.2", payload: bytes | None = None) -> Path:
+        zip_path = self.base / f"0x52_URM_{version}.zip"
+        rpa_bytes = payload if payload is not None else (b"RPA-2.0 0000000000000100\n" + b"X" * 2048)
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            archive.writestr(renpy.URM_FILENAME, rpa_bytes)
+        return zip_path
+
+    def _make_renpy_game(self, folder_name: str = "My RenPy VN") -> tuple[Path, Game]:
+        game_dir = self.base / folder_name
+        (game_dir / "game").mkdir(parents=True)
+        (game_dir / "renpy" / "common").mkdir(parents=True)
+        (game_dir / "game" / "script.rpyc").write_bytes(b"RENPY")
+        (game_dir / "renpy" / "common" / "00start.rpy").write_text("# renpy\n", encoding="utf-8")
+        game = make_game(game_dir, name=folder_name)
+        game.engine_key = "renpy"
+        return game_dir, game
+
+    def test_extract_and_cache_validates_rpa_header(self) -> None:
+        zip_path = self._make_fake_urm_zip("2.6.2")
+        release = renpy.UrmRelease(version="2.6.2", version_id=1223, url="https://api.0x52.dev/modversions/1223/download")
+        cached = renpy.cache_from_archive(zip_path, release)
+        self.assertEqual(cached.version, "2.6.2")
+        self.assertTrue(cached.rpa_path.is_file())
+        self.assertEqual(len(renpy.list_cached()), 1)
+        self.assertEqual(renpy.verified_rpa(cached), cached.rpa_path)
+
+        bad_zip = self.base / "bad.zip"
+        with zipfile.ZipFile(bad_zip, "w") as archive:
+            archive.writestr(renpy.URM_FILENAME, b"NOT_AN_RPA_FILE" * 200)
+        with self.assertRaises(renpy.RenpyModError):
+            renpy.extract_rpa(bad_zip)
+
+    def test_pick_latest_stable_release_ignores_beta_and_unpublished(self) -> None:
+        entries = [
+            {"id": 1200, "versionName": "2.5.0", "channel": "stable", "isPublished": True},
+            {"id": 1223, "versionName": "2.6.2", "channel": "stable", "isPublished": True},
+            {"id": 1224, "versionName": "2.7.0", "channel": "beta", "isPublished": True},
+            {"id": 1225, "versionName": "2.8.0", "channel": "stable", "isPublished": False},
+        ]
+        picked = renpy._pick_release_from_entries(entries)  # noqa: SLF001
+        self.assertIsNotNone(picked)
+        assert picked is not None
+        self.assertEqual(picked.version, "2.6.2")
+        self.assertEqual(picked.version_id, 1223)
+        self.assertEqual(picked.url, "https://api.0x52.dev/modversions/1223/download")
+
+    def test_detect_finds_renpy_game_dir(self) -> None:
+        game_dir, game = self._make_renpy_game()
+        analysis = detect.analyze(game.exe_path)
+        self.assertEqual(analysis.engine.key, "renpy")
+        self.assertEqual(analysis.renpy_game_dir, "game")
+        self.assertEqual(renpy.find_game_dir(game_dir), game_dir / "game")
+
+    def test_standalone_toggle_without_reshade_uses_cache_and_cleans_up(self) -> None:
+        zip_path = self._make_fake_urm_zip("2.6.2")
+        release = renpy.UrmRelease(version="2.6.2", version_id=1223, url="https://api.0x52.dev/modversions/1223/download")
+        renpy.cache_from_archive(zip_path, release)
+
+        game_dir, game = self._make_renpy_game()
+        store = StoreStub()
+        self.assertFalse(installer.is_renpy_urm_active(game_dir))
+
+        with mock.patch.object(renpy, "fetch_latest_release", side_effect=AssertionError("should use cache")):
+            rel_path = installer.set_renpy_urm(store, game, True)
+
+        self.assertEqual(rel_path, "game/0x52_URM.rpa")
+        self.assertTrue(installer.is_renpy_urm_active(game_dir))
+        self.assertTrue(game.renpy_urm)
+        self.assertEqual(installer.load_manifest(game.id), {})
+        self.assertEqual(installer.load_renpy_meta(game.id).get("version"), "2.6.2")
+
+        installer.set_renpy_urm(store, game, False)
+        self.assertFalse(installer.is_renpy_urm_active(game_dir))
+        self.assertFalse((game_dir / "game" / renpy.URM_FILENAME).exists())
+        self.assertFalse(game.renpy_urm)
+        self.assertEqual(installer.load_renpy_meta(game.id), {})
+
+    @unittest.skipUnless(CACHED is not None, "cache do ReShade vazio")
+    def test_reshade_install_inspect_and_uninstall_with_renpy_urm(self) -> None:
+        zip_path = self._make_fake_urm_zip("2.6.2")
+        release = renpy.UrmRelease(version="2.6.2", version_id=1223, url="https://api.0x52.dev/modversions/1223/download")
+        renpy.cache_from_archive(zip_path, release)
+
+        game_dir, game = self._make_renpy_game("RenPy With ReShade")
+        store = StoreStub()
+        report = installer.install(store, game, InstallOptions(variant="cnn_m", renpy_urm=True))
+        self.assertEqual(report.renpy_urm, "game/0x52_URM.rpa")
+        self.assertEqual(report.renpy_urm_version, "2.6.2")
+        self.assertTrue((game_dir / "game" / renpy.URM_FILENAME).is_file())
+
+        state = installer.inspect(game)
+        self.assertTrue(state.urm_ok)
+        self.assertEqual(state.renpy_urm, "game/0x52_URM.rpa")
+
+        # Removing the rpa manually is flagged by inspect()
+        (game_dir / "game" / renpy.URM_FILENAME).unlink()
+        missing_state = installer.inspect(game)
+        self.assertFalse(missing_state.urm_ok)
+        self.assertTrue(any(renpy.URM_FILENAME in problem for problem in missing_state.problems))
+
+        # Reinstall restores it, then uninstall removes both ReShade and URM cleanly
+        installer.install(store, game, InstallOptions(variant="cnn_m", renpy_urm=True))
+        self.assertTrue((game_dir / "game" / renpy.URM_FILENAME).is_file())
+        installer.uninstall(store, game)
+        self.assertFalse((game_dir / "game" / renpy.URM_FILENAME).exists())
 
 
 if __name__ == "__main__":

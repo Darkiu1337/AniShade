@@ -13,7 +13,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import anime4k, detect, engines, installer, nwjs, reshade
+from . import anime4k, detect, engines, installer, nwjs, renpy, reshade
 from .store import Game, Store, game_id_for
 
 
@@ -30,6 +30,9 @@ def _print_analysis(analysis: detect.GameAnalysis) -> None:
         print(f"Plugin RPGM ...: {analysis.rpgmaker_plugins_js} (ocultar caixa de texto com H)")
     if analysis.nwjs_version:
         print(f"NW.js atual ...: {analysis.nwjs_version}")
+    if analysis.renpy_game_dir:
+        urm_state = "ativo" if renpy.is_urm_active(analysis.game_dir) else "nao instalado"
+        print(f"Mod Ren'Py ....: {analysis.renpy_game_dir}/{renpy.URM_FILENAME} ({urm_state})")
     if analysis.notes:
         print("Notas:")
         for note in analysis.notes:
@@ -112,6 +115,8 @@ def cmd_install(args: argparse.Namespace) -> int:
         rpgmaker_hide_textbox=not args.no_hide_textbox,
         rpgmaker_no_alt_skip=not args.no_alt_skip_plugin,
         rpgmaker_save_slots_100=not args.no_save_slots_plugin,
+        renpy_urm=game.renpy_urm if args.renpy_urm is None else bool(args.renpy_urm),
+        urm_version=store.settings.urm_version,
     )
     report = installer.install(
         store,
@@ -127,6 +132,9 @@ def cmd_install(args: argparse.Namespace) -> int:
     print(f"  Tecnicas .....: {', '.join(report.techniques)}")
     if report.rpgmaker_plugins:
         print(f"  Plugins RPGM .: {', '.join(report.rpgmaker_plugins)}")
+    if report.renpy_urm:
+        ver_suffix = f" (v{report.renpy_urm_version})" if report.renpy_urm_version else ""
+        print(f"  Mod Ren'Py ...: {report.renpy_urm}{ver_suffix}")
     if report.launcher:
         print(f"  Launcher .....: {report.launcher}")
     for warning in report.warnings:
@@ -233,6 +241,50 @@ def cmd_nwjs(args: argparse.Namespace) -> int:
     return 1
 
 
+def cmd_urm(args: argparse.Namespace) -> int:
+    if args.urm_cmd == "cache":
+        if args.download or not renpy.list_cached():
+            cached = renpy.ensure_release(
+                args.version or None,
+                progress=lambda done, total: None,
+                status=lambda message: print(f"* {message}"),
+            )
+            print(f"Cache pronto: Universal Ren'Py Mod {cached.version} em {cached.folder}")
+        for item in renpy.list_cached():
+            print(f"  {item.version:<10} {item.folder}")
+        return 0
+
+    exe = Path(args.exe).resolve()
+    store = Store()
+    game = store.find_by_exe(exe)
+    if game is None:
+        game = _game_from_store(
+            store,
+            exe,
+            argparse.Namespace(variant=None, top_margin=0, aspect=None, api=None, engine=None),
+        )
+    if args.urm_cmd == "enable":
+        result = installer.set_renpy_urm(
+            store,
+            game,
+            True,
+            preferred_version=args.version or store.settings.urm_version,
+            status=lambda message: print(f"* {message}"),
+        )
+        print(f"Universal Ren'Py Mod ativado: {result}")
+        return 0
+    if args.urm_cmd == "disable":
+        installer.set_renpy_urm(
+            store,
+            game,
+            False,
+            status=lambda message: print(f"* {message}"),
+        )
+        print("Universal Ren'Py Mod desativado.")
+        return 0
+    return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="anishade", description="AniShade - ReShade + Anime4K Restore")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -267,6 +319,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-save-slots-plugin",
         action="store_true",
         help="nao instala o plugin que expande para 100 slots de save em jogos RPG Maker MV/MZ",
+    )
+    install.add_argument(
+        "--renpy-urm",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="instala ou remove o Universal Ren'Py Mod (0x52_URM.rpa) em jogos Ren'Py",
     )
     install.set_defaults(func=cmd_install)
 
@@ -317,6 +375,23 @@ def build_parser() -> argparse.ArgumentParser:
     nwjs_cache.add_argument("--version", default="")
     nwjs_cache.add_argument("--arch", default=nwjs.DEFAULT_ARCH, choices=["win-x64", "win-ia32"])
     nwjs_cache.set_defaults(func=cmd_nwjs)
+
+    urm_cmd = sub.add_parser("urm", help="gerencia o Universal Ren'Py Mod (0x52.dev) em jogos Ren'Py")
+    urm_sub = urm_cmd.add_subparsers(dest="urm_cmd", required=True)
+
+    urm_enable = urm_sub.add_parser("enable", help="instala 0x52_URM.rpa na pasta game/ do jogo Ren'Py")
+    urm_enable.add_argument("exe")
+    urm_enable.add_argument("--version", default="")
+    urm_enable.set_defaults(func=cmd_urm)
+
+    urm_disable = urm_sub.add_parser("disable", help="remove 0x52_URM.rpa do jogo Ren'Py")
+    urm_disable.add_argument("exe")
+    urm_disable.set_defaults(func=cmd_urm)
+
+    urm_cache = urm_sub.add_parser("cache", help="lista ou baixa o Universal Ren'Py Mod para o cache")
+    urm_cache.add_argument("--download", action="store_true")
+    urm_cache.add_argument("--version", default="")
+    urm_cache.set_defaults(func=cmd_urm)
     return parser
 
 
@@ -325,7 +400,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return int(args.func(args))
-    except (installer.InstallError, reshade.ReshadeError, nwjs.NwjsError, FileNotFoundError, PermissionError) as exc:
+    except (
+        installer.InstallError,
+        reshade.ReshadeError,
+        nwjs.NwjsError,
+        renpy.RenpyModError,
+        FileNotFoundError,
+        PermissionError,
+    ) as exc:
         print(f"ERRO: {exc}", file=sys.stderr)
         return 1
 
